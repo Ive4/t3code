@@ -1,10 +1,10 @@
 import type { NavigationState } from "@react-navigation/native";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import * as Linking from "expo-linking";
 import { AppState, Dimensions, Platform } from "react-native";
 
 import { environmentCatalog } from "../../../connection/catalog";
 import { deriveLayout } from "../../../lib/layout";
+import * as Linking from "../../../native/appLinking";
 import {
   NATIVE_METRICS_TIMEOUT_MS,
   nativeWorkspaceColumnsSupportedFor,

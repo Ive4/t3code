@@ -19,110 +19,70 @@ import {
   type RuntimeRequestId,
   type RunId,
 } from "@t3tools/contracts";
-import { readPairingQrPayload } from "@t3tools/shared/remote";
+import { buildPairingUrl, parsePairingUrl, readPairingQrPayload } from "@t3tools/shared/remote";
 import { parseUrl } from "@t3tools/shared/url";
 import * as Option from "effect/Option";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Random from "effect/Random";
 import { AsyncResult } from "effect/reactivity";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   Button,
   // oxlint-disable-next-line eslint/no-restricted-imports -- The mobile native scroll view targets iOS and Android.
   FlatList,
-  I18nManager,
+  Keyboard,
   KeyboardAvoidingView,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TurboModuleRegistry,
   type TurboModule,
+  useColorScheme,
   View,
 } from "react-native";
+import {
+  EnvironmentIdentity,
+  EnvironmentListCard,
+} from "../../mobile/src/features/connection/EnvironmentListContent";
+import {
+  PairingFormContent,
+  PairingScanSurface,
+} from "../../mobile/src/features/connection/PairingFormContent";
+import { UserMessageBubble } from "../../mobile/src/features/threads/UserMessageBubble";
+import { ThreadListTitle } from "../../mobile/src/features/threads/ThreadListTitle";
+import {
+  DEFAULT_MOBILE_THEME_ID,
+  getMobileThemeVariables,
+  isDarkThemeColor,
+} from "../../mobile/src/lib/mobileTheme";
 import { catalog, dispatch, pair, server, shell, threads } from "./runtime";
 import { PendingQuestions } from "./PendingQuestions";
 import { ModelPicker } from "./ModelPicker";
 
-const text = I18nManager.getConstants().localeIdentifier?.startsWith("zh")
-  ? {
-      connect: "连接",
-      pairingLink: "配对链接",
-      pairingFailed: "无法连接此环境。",
-      scan: "扫描配对二维码",
-      scanFailed: "无法扫描配对二维码。",
-      environments: "环境",
-      addEnvironment: "添加环境",
-      projects: "项目",
-      noProjects: "此环境没有项目。",
-      threads: "会话",
-      noThreads: "此项目没有会话。",
-      newThread: "新建会话",
-      selectModel: "选择模型",
-      noDefaultModel: "请为新会话选择模型。",
-      noModels: "此项目没有可用模型。",
-      noMessages: "此会话没有消息。",
-      back: "返回",
-      disconnect: "断开连接",
-      retry: "重试",
-      message: "输入消息",
-      send: "发送",
-      sendFailed: "消息未发送。",
-      commandFailed: "操作失败。",
-      approval: "代理请求审批",
-      allow: "允许一次",
-      decline: "拒绝",
-      stop: "停止任务",
-      storeFailed: "无法读取已保存的连接。",
-      approvalExpired: "此审批已无法响应。",
-      answer: "输入答案",
-      submitAnswers: "提交答案",
-      dismiss: "忽略",
-      requestExpired: "此问题已无法回答。",
-      user: "你",
-      assistant: "代理",
-      system: "系统",
-    }
-  : {
-      connect: "Connect",
-      pairingLink: "Pairing link",
-      pairingFailed: "Could not connect to this environment.",
-      scan: "Scan pairing QR code",
-      scanFailed: "Could not scan a pairing QR code.",
-      environments: "Environments",
-      addEnvironment: "Add environment",
-      projects: "Projects",
-      noProjects: "This environment has no projects.",
-      threads: "Threads",
-      noThreads: "This project has no threads.",
-      newThread: "New thread",
-      selectModel: "Choose model",
-      noDefaultModel: "Choose a model for the new thread.",
-      noModels: "No models are available for this project.",
-      noMessages: "This thread has no messages.",
-      back: "Back",
-      disconnect: "Disconnect",
-      retry: "Retry",
-      message: "Message",
-      send: "Send",
-      sendFailed: "The message was not sent.",
-      commandFailed: "The action failed.",
-      approval: "Agent approval request",
-      allow: "Allow once",
-      decline: "Decline",
-      stop: "Stop run",
-      storeFailed: "Could not read saved connections.",
-      approvalExpired: "This approval can no longer be answered.",
-      answer: "Enter an answer",
-      submitAnswers: "Submit answers",
-      dismiss: "Dismiss",
-      requestExpired: "This question can no longer be answered.",
-      user: "You",
-      assistant: "Agent",
-      system: "System",
-    };
+import { text } from "./labels";
+import { WorkspaceActivity, type ActivityDetail } from "./WorkspaceActivity";
+import { WorkspaceFiles } from "./WorkspaceFiles";
+import {
+  SearchField,
+  WorkspaceSettings,
+  type Appearance,
+  type SettingsPage,
+} from "./WorkspaceSettings";
+import {
+  PageBody,
+  PageText,
+  Toolbar,
+  ToolbarAction,
+  WorkspaceTabs,
+  WorkspaceTheme,
+  useWorkspaceTheme,
+  type WorkspaceTab,
+} from "./WorkspaceUi";
 
 const newId = Effect.gen(function* () {
   const time = yield* Clock.currentTimeMillis;
@@ -135,24 +95,25 @@ const defaultApprovalOptions: readonly ProviderApprovalOption[] = [
   { decision: "decline", label: text.decline },
 ];
 
+const lightTheme = getMobileThemeVariables(DEFAULT_MOBILE_THEME_ID, "light");
+const darkTheme = getMobileThemeVariables(DEFAULT_MOBILE_THEME_ID, "dark");
+
 function useCommand<Input, Value, Error>(command: AtomCommand<Input, Value, Error>) {
   const registry = useContext(RegistryContext);
   return (input: Input) => runAtomCommand(registry, command, input, { reportFailure: false });
 }
 
-function Row({
-  title,
-  subtitle,
-  onPress,
-}: {
-  title: string;
-  subtitle?: string;
-  onPress: () => void;
-}) {
+function Row({ title, onPress }: { title: string; onPress: () => void }) {
+  const theme = useWorkspaceTheme();
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.row}>
-      <Text style={styles.rowTitle}>{title}</Text>
-      {subtitle && <Text style={styles.body}>{subtitle}</Text>}
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.row, { borderBottomColor: theme["--color-border-subtle"] }]}
+    >
+      <ThreadListTitle style={{ color: theme["--color-foreground"], fontWeight: "500" }}>
+        {title}
+      </ThreadListTitle>
     </Pressable>
   );
 }
@@ -165,16 +126,26 @@ function Pairing({
   back?: () => void;
 }) {
   const connect = useCommand(pair);
-  const [url, setUrl] = useState("");
+  const [address, setAddress] = useState("");
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [scanFailed, setScanFailed] = useState(false);
+  const theme = useWorkspaceTheme();
+  const light = !isDarkThemeColor(theme["--color-sheet-solid"]);
+  const disabled = busy || scanning;
+
+  function changeAddress(value: string) {
+    const fields = parsePairingUrl(value);
+    setAddress(fields.code ? fields.host : value);
+    if (fields.code) setCode(fields.code);
+    setFailure(null);
+  }
 
   async function scanCode() {
     if (busy || scanning) return;
     setScanning(true);
-    setScanFailed(false);
+    setFailure(null);
     try {
       const scanner = TurboModuleRegistry.getEnforcing<
         TurboModule & {
@@ -184,20 +155,17 @@ function Pairing({
       const payload = await scanner.scan();
       if (payload === null) return;
       const link = readPairingQrPayload(payload);
-      if (link === null) setScanFailed(true);
-      else {
-        setUrl(link);
-        setFailure(null);
-      }
+      if (link === null) setFailure(text.scanFailed);
+      else changeAddress(link);
     } catch {
-      setScanFailed(true);
+      setFailure(text.scanFailed);
     } finally {
       setScanning(false);
     }
   }
   async function submit() {
-    const link = url.trim();
-    if (!link || busy || scanning) return;
+    const link = buildPairingUrl(address, code);
+    if (!link || disabled) return;
     setBusy(true);
     setFailure(null);
     try {
@@ -213,38 +181,55 @@ function Pairing({
   }
 
   return (
-    <View style={styles.content}>
-      {back && <Button title={text.back} disabled={busy || scanning} onPress={back} />}
-      <Text style={styles.title}>T3 Code</Text>
-      <TextInput
-        accessibilityLabel={text.pairingLink}
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={!busy && !scanning}
-        keyboardType="url"
-        onChangeText={setUrl}
-        onSubmitEditing={() => void submit()}
-        placeholder={text.pairingLink}
-        style={styles.input}
-        value={url}
-      />
-      <Button
-        title={text.connect}
-        disabled={busy || scanning || !url.trim()}
-        onPress={() => void submit()}
-      />
-      <Button title={text.scan} disabled={busy || scanning} onPress={() => void scanCode()} />
-      {busy && <ActivityIndicator />}
-      {scanFailed && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {text.scanFailed}
-        </Text>
-      )}
-      {failure !== null && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {failure}
-        </Text>
-      )}
+    <View style={[styles.conversation, { backgroundColor: theme["--color-sheet-solid"] }]}>
+      <Toolbar title={text.addEnvironment} {...(back && !disabled && { back })}>
+        <ToolbarAction
+          label={text.connect}
+          glyph="✓"
+          busy={busy}
+          disabled={disabled || !address.trim()}
+          onPress={() => void submit()}
+        />
+      </Toolbar>
+      <PageBody>
+        <PairingFormContent
+          scanner={
+            <PairingScanSurface
+              light={light}
+              disabled={disabled}
+              scanLabel={text.scan}
+              tapLabel={text.tapToScan}
+              instructions={text.scanInstructions}
+              onPress={() => void scanCode()}
+            />
+          }
+          address={address}
+          code={code}
+          onAddressChange={changeAddress}
+          onCodeChange={(value) => {
+            setCode(value);
+            setFailure(null);
+          }}
+          onSubmit={() => void submit()}
+          editable={!disabled}
+          error={failure}
+          colors={{
+            foreground: theme["--color-foreground"],
+            muted: theme["--color-foreground-muted"],
+            placeholder: theme["--color-placeholder"],
+            card: theme["--color-grouped-card"],
+            border: theme["--color-border-subtle"],
+            error: theme["--color-danger-foreground"],
+          }}
+          labels={{
+            manual: text.enterManually,
+            address: text.address,
+            code: text.code,
+            codePlaceholder: text.pairingCode,
+            help: text.pairingHelp,
+          }}
+        />
+      </PageBody>
     </View>
   );
 }
@@ -252,18 +237,21 @@ function Pairing({
 function Conversation({
   environmentId,
   threadId,
+  initialDraft,
   back,
 }: {
   environmentId: EnvironmentId;
   threadId: ThreadId;
+  initialDraft: string;
   back: () => void;
 }) {
+  const theme = useWorkspaceTheme();
   const result = useAtomValue(threads.stateAtom(environmentId, threadId));
   const state = AsyncResult.getOrElse(result, () => null);
   const projection = state === null ? null : Option.getOrNull(state.data);
   const canWrite = useAtomValue(dispatch.permissionAtom(environmentId));
   const send = useCommand(dispatch);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -339,48 +327,55 @@ function Conversation({
   }
 
   return (
-    <View style={styles.content}>
-      <Button title={text.back} onPress={back} />
-      <Text style={styles.title}>{projection?.thread.title ?? text.threads}</Text>
-      {state && Option.isSome(state.error) && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {state.error.value}
-        </Text>
-      )}
+    <View style={[styles.conversation, { backgroundColor: theme["--color-thread-canvas"] }]}>
+      <Toolbar title={projection?.thread.title ?? text.threads} back={back} />
+      {state && Option.isSome(state.error) && <PageText error>{state.error.value}</PageText>}
       {projection ? (
         <FlatList
           data={projection.messages}
           keyExtractor={(message) => message.id}
-          renderItem={({ item }) => (
-            <View style={styles.row}>
-              <Text style={styles.rowTitle}>{text[item.role]}</Text>
-              <Text selectable style={styles.body}>
-                {item.text}
-              </Text>
-            </View>
-          )}
-          ListEmptyComponent={<Text style={styles.body}>{text.noMessages}</Text>}
+          renderItem={({ item }) =>
+            item.role === "user" ? (
+              <UserMessageBubble color={theme["--color-user-bubble"]} style={styles.userMessage}>
+                <Text
+                  selectable
+                  style={[styles.body, { color: theme["--color-user-bubble-foreground"] }]}
+                >
+                  {item.text}
+                </Text>
+              </UserMessageBubble>
+            ) : (
+              <View style={styles.row}>
+                <Text style={[styles.rowTitle, { color: theme["--color-foreground"] }]}>
+                  {text[item.role]}
+                </Text>
+                <Text selectable style={[styles.body, { color: theme["--color-foreground"] }]}>
+                  {item.text}
+                </Text>
+              </View>
+            )
+          }
+          ListEmptyComponent={<PageText muted>{text.noMessages}</PageText>}
           style={styles.list}
+          contentContainerStyle={styles.messages}
         />
       ) : !state || (state.status !== "deleted" && Option.isNone(state.error)) ? (
         <ActivityIndicator />
       ) : null}
       {approval && (
         <View style={styles.row}>
-          <Text style={styles.rowTitle}>{text.approval}</Text>
+          <PageText>{text.approval}</PageText>
           {(approval.detail ?? approval.reason) && (
-            <Text selectable numberOfLines={5} style={styles.body}>
-              {approval.detail ?? approval.reason}
-            </Text>
+            <PageText>{approval.detail ?? approval.reason}</PageText>
           )}
           {approval.responseCapability === "not_resumable" ? (
-            <Text style={styles.body}>{text.approvalExpired}</Text>
+            <PageText muted>{text.approvalExpired}</PageText>
           ) : (
             canWrite && (
               <View style={styles.actions}>
                 {(approval.options ?? defaultApprovalOptions).map((option) => (
                   <View key={option.decision} style={styles.approvalOption}>
-                    {option.warning && <Text style={styles.body}>{option.warning}</Text>}
+                    {option.warning && <PageText>{option.warning}</PageText>}
                     <Button
                       title={option.label}
                       disabled={actionBusy}
@@ -433,33 +428,35 @@ function Conversation({
           }
         />
       )}
-      {actionFailed && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {text.commandFailed}
-        </Text>
-      )}
-      {failed && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {text.sendFailed}
-        </Text>
-      )}
+      {actionFailed && <PageText error>{text.commandFailed}</PageText>}
+      {failed && <PageText error>{text.sendFailed}</PageText>}
       {projection && state?.status === "live" && canWrite && (
-        <>
+        <View
+          style={[
+            styles.composer,
+            {
+              borderColor: theme["--color-composer-border"],
+              backgroundColor: theme["--color-composer-surface"],
+            },
+          ]}
+        >
           <TextInput
             accessibilityLabel={text.message}
             editable={!busy}
             multiline
             onChangeText={setDraft}
             placeholder={text.message}
-            style={styles.input}
+            placeholderTextColor={theme["--color-placeholder"]}
+            style={[styles.input, { color: theme["--color-foreground"] }]}
             value={draft}
           />
-          <Button
-            title={text.send}
+          <ToolbarAction
+            label={text.send}
+            glyph="↑"
             disabled={busy || !draft.trim()}
             onPress={() => void submit()}
           />
-        </>
+        </View>
       )}
     </View>
   );
@@ -467,29 +464,36 @@ function Conversation({
 
 function Projects({
   environmentId,
-  onDisconnect,
   onOpenEnvironments,
+  openThread,
 }: {
   environmentId: EnvironmentId;
-  onDisconnect: () => void;
   onOpenEnvironments: () => void;
+  openThread: (id: ThreadId, draft?: string) => void;
 }) {
   const state = useAtomValue(shell.stateValueAtom(environmentId));
   const config = useAtomValue(server.configValueAtom(environmentId));
   const snapshot = Option.getOrNull(state.snapshot);
-  const remove = useCommand(catalog.remove);
   const retry = useCommand(catalog.retryNow);
   const mutate = useCommand(dispatch);
   const canWrite = useAtomValue(dispatch.permissionAtom(environmentId));
   const [projectId, setProjectId] = useState<ProjectId | null>(null);
-  const [threadId, setThreadId] = useState<ThreadId | null>(null);
+  const [query, setQuery] = useState("");
+  const [showFiles, setShowFiles] = useState(false);
+  const [newTask, setNewTask] = useState(false);
+  const [taskPrompt, setTaskPrompt] = useState("");
   const [selectingModel, setSelectingModel] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(null);
   const [busy, setBusy] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
   const [failed, setFailed] = useState(false);
   const project = snapshot?.projects.find((entry) => entry.id === projectId);
-  const projectThreads = snapshot?.threads.filter((entry) => entry.projectId === projectId) ?? [];
+  const activeThreads = snapshot?.threads.filter((entry) => entry.archivedAt === null) ?? [];
+  const projectThreads = activeThreads.filter((entry) => entry.projectId === projectId);
+  const needle = query.trim().toLocaleLowerCase();
+  const results = (project ? projectThreads : activeThreads).filter((entry) =>
+    entry.title.toLocaleLowerCase().includes(needle),
+  );
+  const theme = useWorkspaceTheme();
   const modelSelection =
     selectedModel ??
     project?.defaultModelSelection ??
@@ -519,216 +523,442 @@ function Projects({
           worktreePath: null,
         },
       });
-      if (result._tag === "Success") setThreadId(id);
-      else setFailed(true);
+      if (result._tag === "Success") {
+        openThread(id, taskPrompt);
+        setNewTask(false);
+        setTaskPrompt("");
+      } else setFailed(true);
     } finally {
       setBusy(false);
     }
   }
 
-  async function disconnect() {
+  if (showFiles && project) {
+    return (
+      <WorkspaceFiles
+        environmentId={environmentId}
+        cwd={project.workspaceRoot}
+        back={() => setShowFiles(false)}
+      />
+    );
+  }
+
+  const modelPicker =
+    project && selectingModel ? (
+      <ModelPicker
+        config={config}
+        project={project}
+        selection={modelSelection ?? null}
+        labels={text}
+        onClose={() => setSelectingModel(false)}
+        onSelect={(selection) => {
+          setSelectedModel(selection);
+          setSelectingModel(false);
+        }}
+      />
+    ) : null;
+
+  if (newTask && project) {
+    return (
+      <>
+        <Toolbar title={text.newTask} back={() => setNewTask(false)} />
+        <PageBody>
+          <PageText muted>{project.title}</PageText>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setSelectingModel(true)}
+            style={styles.projectActions}
+          >
+            <PageText>{modelSelection?.model ?? text.selectModel} ⌄</PageText>
+          </Pressable>
+          <TextInput
+            accessibilityLabel={text.message}
+            placeholder={text.message}
+            placeholderTextColor={theme["--color-placeholder"]}
+            editable={!busy}
+            multiline
+            value={taskPrompt}
+            onChangeText={setTaskPrompt}
+            style={[
+              styles.taskDraft,
+              { color: theme["--color-foreground"], borderColor: theme["--color-border-subtle"] },
+            ]}
+          />
+          {failed && <PageText error>{text.commandFailed}</PageText>}
+          <Button
+            title={text.newThread}
+            disabled={!modelSelection || busy || !canWrite}
+            onPress={() => void createThread()}
+          />
+        </PageBody>
+        {modelPicker}
+      </>
+    );
+  }
+
+  return (
+    <View style={styles.list}>
+      <Toolbar
+        title={project?.title ?? text.threads}
+        {...(project && {
+          back: () => {
+            setProjectId(null);
+            setSelectedModel(null);
+            setQuery("");
+          },
+        })}
+      >
+        {!project && (
+          <ToolbarAction label={text.environments} glyph="◎" onPress={onOpenEnvironments} />
+        )}
+        {project && (
+          <ToolbarAction label={text.files} glyph="▤" onPress={() => setShowFiles(true)} />
+        )}
+        {project && canWrite && (
+          <ToolbarAction
+            label={text.newTask}
+            glyph="+"
+            disabled={busy}
+            onPress={() => {
+              setFailed(false);
+              setNewTask(true);
+            }}
+          />
+        )}
+      </Toolbar>
+      {snapshot === null && Option.isNone(state.error) && <ActivityIndicator />}
+      {Option.isSome(state.error) && (
+        <>
+          <PageText error>{state.error.value}</PageText>
+          <Button title={text.retry} onPress={() => void retry(environmentId)} />
+        </>
+      )}
+      {failed && <PageText error>{text.commandFailed}</PageText>}
+      {snapshot && <SearchField value={query} onChangeText={setQuery} />}
+      {snapshot &&
+        (project || needle ? (
+          <>
+            <FlatList
+              data={results}
+              keyExtractor={(entry) => entry.id}
+              renderItem={({ item }) => (
+                <Row title={item.title} onPress={() => openThread(item.id)} />
+              )}
+              ListEmptyComponent={
+                <PageText muted>{needle ? text.noResults : text.noThreads}</PageText>
+              }
+              style={styles.list}
+              contentContainerStyle={styles.listPadding}
+              keyboardShouldPersistTaps="handled"
+            />
+            {project && canWrite && (
+              <View style={styles.projectActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={text.selectModel}
+                  disabled={busy}
+                  onPress={() => setSelectingModel(true)}
+                >
+                  <Text style={{ color: theme["--color-foreground"] }}>
+                    {modelSelection?.model ?? text.selectModel} ⌄
+                  </Text>
+                </Pressable>
+                {modelPicker}
+              </View>
+            )}
+          </>
+        ) : (
+          <FlatList
+            data={snapshot.projects.filter((entry) => entry.archivedAt == null)}
+            keyExtractor={(entry) => entry.id}
+            renderItem={({ item }) => (
+              <Row
+                title={item.title}
+                onPress={() => {
+                  setProjectId(item.id);
+                  setSelectedModel(null);
+                }}
+              />
+            )}
+            ListEmptyComponent={<PageText muted>{text.noProjects}</PageText>}
+            style={styles.list}
+            contentContainerStyle={styles.listPadding}
+            keyboardShouldPersistTaps="handled"
+          />
+        ))}
+    </View>
+  );
+}
+
+type Overlay = "environments" | "environmentDetail" | "pairing";
+
+export default function App() {
+  const saved = useAtomValue(catalog.catalogAtom);
+  const colorScheme = useColorScheme();
+  const [appearance, setAppearance] = useState<Appearance>("systemTheme");
+  const light = appearance === "systemTheme" ? colorScheme !== "dark" : appearance === "lightTheme";
+  const theme = light ? lightTheme : darkTheme;
+  const [selectedId, setEnvironmentId] = useState<EnvironmentId | null>(null);
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [inspectingId, setInspectingId] = useState<EnvironmentId | null>(null);
+  const [tab, setTab] = useState<WorkspaceTab>("threads");
+  const [threadId, setThreadId] = useState<ThreadId | null>(null);
+  const [initialDraft, setInitialDraft] = useState("");
+  const [detail, setDetail] = useState<ActivityDetail | null>(null);
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>("settings");
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectFailed, setDisconnectFailed] = useState(false);
+  const remove = useCommand(catalog.remove);
+  const readyCatalog = saved._tag === "Success" && saved.value.isReady ? saved.value : null;
+  const environmentIds = readyCatalog ? Array.from(enabledEnvironmentIds(readyCatalog)) : [];
+  const environmentId =
+    selectedId !== null && environmentIds.includes(selectedId) ? selectedId : environmentIds[0];
+  const inspected = inspectingId ? readyCatalog?.entries.get(inspectingId) : undefined;
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (Keyboard.isVisible()) Keyboard.dismiss();
+      else if (overlay === "pairing" && environmentId) setOverlay("environments");
+      else if (overlay === "environmentDetail") setOverlay("environments");
+      else if (overlay === "environments") setOverlay(null);
+      else if (threadId) setThreadId(null);
+      else if (detail) setDetail(null);
+      else if (tab === "settings" && settingsPage !== "settings") setSettingsPage("settings");
+      else if (tab !== "threads") setTab("threads");
+      else return false;
+      return true;
+    });
+    return () => subscription.remove();
+  }, [overlay, environmentId, threadId, detail, tab, settingsPage]);
+
+  function openProjects(id: EnvironmentId) {
+    setEnvironmentId(id);
+    setOverlay(null);
+    setTab("threads");
+    setDetail(null);
+    setThreadId(null);
+  }
+
+  function openThread(id: ThreadId, draft = "") {
+    setInitialDraft(draft);
+    setThreadId(id);
+  }
+
+  async function disconnect(id: EnvironmentId) {
     if (disconnecting) return;
     setDisconnecting(true);
-    setFailed(false);
+    setDisconnectFailed(false);
     try {
-      const result = await remove(environmentId);
-      if (result._tag === "Success") onDisconnect();
-      else setFailed(true);
+      const result = await remove(id);
+      if (result._tag === "Success") {
+        if (id === selectedId) setEnvironmentId(null);
+        setInspectingId(null);
+        setOverlay("environments");
+      } else {
+        setDisconnectFailed(true);
+      }
     } finally {
       setDisconnecting(false);
     }
   }
 
-  if (threadId !== null) {
-    return (
-      <Conversation
-        key={threadId}
-        environmentId={environmentId}
-        threadId={threadId}
-        back={() => setThreadId(null)}
-      />
-    );
-  }
-
   return (
-    <View style={styles.content}>
-      {project ? (
-        <Button
-          title={text.back}
-          onPress={() => {
-            setProjectId(null);
-            setSelectedModel(null);
-          }}
-        />
-      ) : (
-        <Button title={text.environments} disabled={disconnecting} onPress={onOpenEnvironments} />
-      )}
-      <Text style={styles.title}>{project?.title ?? text.projects}</Text>
-      {snapshot === null && Option.isNone(state.error) && <ActivityIndicator />}
-      {Option.isSome(state.error) && (
-        <>
-          <Text accessibilityRole="alert" style={styles.error}>
-            {state.error.value}
-          </Text>
-          <Button title={text.retry} onPress={() => void retry(environmentId)} />
-        </>
-      )}
-      {failed && (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {text.commandFailed}
-        </Text>
-      )}
-      {project ? (
-        <>
-          <FlatList
-            data={projectThreads}
-            keyExtractor={(entry) => entry.id}
-            renderItem={({ item }) => (
-              <Row title={item.title} onPress={() => setThreadId(item.id)} />
-            )}
-            ListEmptyComponent={<Text style={styles.body}>{text.noThreads}</Text>}
-            style={styles.list}
+    <WorkspaceTheme value={theme}>
+      <KeyboardAvoidingView
+        behavior="height"
+        style={[styles.page, { backgroundColor: theme["--color-screen"] }]}
+      >
+        <StatusBar barStyle={light ? "dark-content" : "light-content"} />
+        {saved._tag === "Failure" ? (
+          <PageBody>
+            <PageText error>{text.storeFailed}</PageText>
+          </PageBody>
+        ) : readyCatalog === null ? (
+          <PageBody>
+            <ActivityIndicator accessibilityLabel={text.loading} />
+          </PageBody>
+        ) : overlay === "pairing" || !environmentId ? (
+          <Pairing
+            onConnect={openProjects}
+            {...(environmentId && { back: () => setOverlay("environments") })}
           />
-          {canWrite && (
-            <>
+        ) : overlay === "environmentDetail" && inspected && inspectingId ? (
+          <>
+            <Toolbar title={inspected.target.label} back={() => setOverlay("environments")} />
+            <PageBody>
+              <PageText muted>{connectionAddress(inspected.profile)}</PageText>
+              <Button title={text.switchEnvironment} onPress={() => openProjects(inspectingId)} />
               <Button
-                title={text.selectModel}
-                disabled={busy}
-                onPress={() => setSelectingModel(true)}
+                title={text.disconnect}
+                disabled={disconnecting}
+                onPress={() => void disconnect(inspectingId)}
               />
-              {modelSelection ? (
-                <>
-                  <Text style={styles.body}>{modelSelection.model}</Text>
-                  <Button
-                    title={text.newThread}
-                    disabled={busy}
-                    onPress={() => void createThread()}
-                  />
-                </>
-              ) : (
-                <Text style={styles.body}>{text.noDefaultModel}</Text>
-              )}
-              {selectingModel && (
-                <ModelPicker
-                  config={config}
-                  project={project}
-                  selection={modelSelection ?? null}
-                  labels={text}
-                  onClose={() => setSelectingModel(false)}
-                  onSelect={(selection) => {
-                    setSelectedModel(selection);
-                    setSelectingModel(false);
-                  }}
+              {disconnectFailed && <PageText error>{text.commandFailed}</PageText>}
+            </PageBody>
+          </>
+        ) : overlay === "environments" ? (
+          <>
+            <Toolbar title={text.environments} back={() => setOverlay(null)}>
+              <ToolbarAction
+                label={text.addEnvironment}
+                glyph="+"
+                onPress={() => setOverlay("pairing")}
+              />
+            </Toolbar>
+            <PageBody>
+              <EnvironmentListCard color={theme["--color-grouped-card"]}>
+                {environmentIds.map((id, index) => {
+                  const entry = readyCatalog.entries.get(id);
+                  if (!entry) return null;
+                  return (
+                    <View
+                      key={id}
+                      style={[
+                        styles.environmentRow,
+                        index > 0 && {
+                          borderTopWidth: StyleSheet.hairlineWidth,
+                          borderTopColor: theme["--color-border-subtle"],
+                        },
+                      ]}
+                    >
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: id === environmentId }}
+                        onPress={() => openProjects(id)}
+                        style={styles.environmentIdentity}
+                      >
+                        <EnvironmentIdentity
+                          name={entry.target.label}
+                          address={connectionAddress(entry.profile)}
+                          foreground={theme["--color-foreground"]}
+                          muted={theme["--color-foreground-muted"]}
+                        />
+                      </Pressable>
+                      <ToolbarAction
+                        label={entry.target.label}
+                        glyph="›"
+                        onPress={() => {
+                          setDisconnectFailed(false);
+                          setInspectingId(id);
+                          setOverlay("environmentDetail");
+                        }}
+                      />
+                    </View>
+                  );
+                })}
+              </EnvironmentListCard>
+            </PageBody>
+          </>
+        ) : (
+          <>
+            {tab === "threads" && (
+              <View style={threadId ? styles.offscreen : styles.list}>
+                <Projects
+                  key={environmentId}
+                  environmentId={environmentId}
+                  onOpenEnvironments={() => setOverlay("environments")}
+                  openThread={openThread}
                 />
-              )}
-            </>
-          )}
-        </>
-      ) : snapshot !== null ? (
-        <FlatList
-          data={snapshot.projects.filter((entry) => entry.archivedAt == null)}
-          keyExtractor={(entry) => entry.id}
-          renderItem={({ item }) => (
-            <Row title={item.title} onPress={() => setProjectId(item.id)} />
-          )}
-          ListEmptyComponent={<Text style={styles.body}>{text.noProjects}</Text>}
-          style={styles.list}
-        />
-      ) : null}
-      {!project && (
-        <Button
-          title={text.disconnect}
-          disabled={disconnecting}
-          onPress={() => void disconnect()}
-        />
-      )}
-    </View>
+              </View>
+            )}
+            {threadId !== null ? (
+              <Conversation
+                key={threadId}
+                environmentId={environmentId}
+                threadId={threadId}
+                initialDraft={initialDraft}
+                back={() => setThreadId(null)}
+              />
+            ) : tab === "settings" ? (
+              <WorkspaceSettings
+                page={settingsPage}
+                appearance={appearance}
+                onAppearance={setAppearance}
+                onPage={setSettingsPage}
+                environmentId={environmentId}
+                environmentCount={environmentIds.length}
+                onEnvironments={() => setOverlay("environments")}
+                openThread={openThread}
+              />
+            ) : tab !== "threads" ? (
+              <WorkspaceActivity
+                key={environmentId}
+                tab={tab}
+                environmentId={environmentId}
+                detail={detail}
+                setDetail={setDetail}
+              />
+            ) : null}
+            {threadId === null && detail === null && (
+              <WorkspaceTabs
+                selected={tab}
+                onSelect={(value) => {
+                  Keyboard.dismiss();
+                  setTab(value);
+                  setDetail(null);
+                }}
+              />
+            )}
+          </>
+        )}
+      </KeyboardAvoidingView>
+    </WorkspaceTheme>
   );
 }
 
-export default function App() {
-  const saved = useAtomValue(catalog.catalogAtom);
-  const [selectedId, setEnvironmentId] = useState<EnvironmentId | null>(null);
-  const [screen, setScreen] = useState<"projects" | "environments" | "pairing">("projects");
-  const readyCatalog = saved._tag === "Success" && saved.value.isReady ? saved.value : null;
-  const environmentIds = readyCatalog ? Array.from(enabledEnvironmentIds(readyCatalog)) : [];
-  const environmentId =
-    selectedId !== null && environmentIds.includes(selectedId) ? selectedId : environmentIds[0];
-
-  function openProjects(id: EnvironmentId) {
-    setEnvironmentId(id);
-    setScreen("projects");
-  }
-
-  return (
-    <KeyboardAvoidingView behavior="height" style={styles.screen}>
-      {saved._tag === "Failure" ? (
-        <View style={styles.content}>
-          <Text accessibilityRole="alert" style={styles.error}>
-            {text.storeFailed}
-          </Text>
-        </View>
-      ) : readyCatalog === null ? (
-        <View style={styles.content}>
-          <ActivityIndicator />
-        </View>
-      ) : screen === "pairing" || !environmentId ? (
-        <Pairing
-          onConnect={openProjects}
-          {...(environmentId && { back: () => setScreen("environments") })}
-        />
-      ) : screen === "environments" ? (
-        <View style={styles.content}>
-          <Button title={text.back} onPress={() => setScreen("projects")} />
-          <Text style={styles.title}>{text.environments}</Text>
-          <FlatList
-            data={environmentIds}
-            keyExtractor={(id) => id}
-            renderItem={({ item }) => {
-              const entry = readyCatalog.entries.get(item);
-              if (!entry) return null;
-              const profile = Option.getOrNull(entry.profile);
-              const subtitle =
-                profile?._tag === "BearerConnectionProfile"
-                  ? parseUrl(profile.httpBaseUrl)?.host
-                  : undefined;
-              return (
-                <Row
-                  title={entry.target.label}
-                  {...(subtitle && { subtitle })}
-                  onPress={() => openProjects(item)}
-                />
-              );
-            }}
-            style={styles.list}
-          />
-          <Button title={text.addEnvironment} onPress={() => setScreen("pairing")} />
-        </View>
-      ) : (
-        <Projects
-          key={environmentId}
-          environmentId={environmentId}
-          onDisconnect={() => {
-            setEnvironmentId(null);
-            setScreen("environments");
-          }}
-          onOpenEnvironments={() => setScreen("environments")}
-        />
-      )}
-    </KeyboardAvoidingView>
-  );
+function connectionAddress(
+  profile: Option.Option<{ readonly _tag: string; readonly httpBaseUrl?: string }>,
+) {
+  const value = Option.getOrNull(profile);
+  return value?._tag === "BearerConnectionProfile" && value.httpBaseUrl
+    ? (parseUrl(value.httpBaseUrl)?.host ?? "")
+    : "";
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  content: { flex: 1, gap: 12, padding: 20, paddingTop: 44 },
-  title: { color: "#171717", fontSize: 26, fontWeight: "600" },
-  input: { borderColor: "#8b8b8b", borderWidth: 1, borderRadius: 8, padding: 12, color: "#171717" },
-  row: { gap: 4, paddingVertical: 14, borderBottomColor: "#dedede", borderBottomWidth: 1 },
-  rowTitle: { color: "#171717", fontSize: 16, fontWeight: "600" },
+  page: { flex: 1, paddingTop: 40 },
+  conversation: { flex: 1 },
+  environmentRow: { flexDirection: "row", alignItems: "center", marginStart: 16, paddingEnd: 4 },
+  environmentIdentity: { flex: 1, minWidth: 0, gap: 2, paddingVertical: 14 },
+  userMessage: {
+    alignSelf: "flex-end",
+    maxWidth: "88%",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginVertical: 6,
+  },
+  messages: { padding: 16 },
+  composer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    borderWidth: 1,
+    borderRadius: 27,
+    marginHorizontal: 12,
+    marginBottom: 16,
+    paddingEnd: 4,
+  },
+  input: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 140,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    textAlignVertical: "center",
+  },
+  row: { gap: 4, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  rowTitle: { fontSize: 16, fontWeight: "600" },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   approvalOption: { maxWidth: "100%", gap: 4 },
-  body: { color: "#282828", fontSize: 16 },
+  body: { fontSize: 16 },
   list: { flex: 1 },
-  error: { color: "#a32121" },
+  listPadding: { paddingHorizontal: 16, paddingTop: 4 },
+  projectActions: { paddingHorizontal: 16, paddingVertical: 8 },
+  taskDraft: {
+    minHeight: 120,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    textAlignVertical: "top",
+  },
+  offscreen: { display: "none" },
 });

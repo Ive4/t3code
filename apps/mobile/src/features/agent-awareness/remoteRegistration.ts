@@ -4,7 +4,7 @@ import {
   clearAndroidAgentNotifications,
 } from "./androidNotifications";
 import Constants from "expo-constants";
-import * as Notifications from "expo-notifications";
+import { nativeNotifications } from "../../native/notifications";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -280,7 +280,8 @@ function iosMajorVersion(): number {
 
 const nativePushTokenRegistration = Effect.fn("remoteRegistration.nativePushTokenRegistration")(
   function* (observedPushToken?: string) {
-    if (!canRegisterPushNotifications() || !supportsAgentAwarenessPush()) {
+    const Notifications = nativeNotifications;
+    if (!Notifications || !canRegisterPushNotifications() || !supportsAgentAwarenessPush()) {
       return { notificationsEnabled: false, pushToken: null, notificationPermissionGranted: false };
     }
     const permissions = yield* Effect.tryPromise({
@@ -768,7 +769,8 @@ const registerDevice = Effect.fn("remoteRegistration.registerDevice")(function* 
 });
 
 function ensurePushTokenListener(): void {
-  if (pushTokenSubscription || !canRegisterPushNotifications()) {
+  const Notifications = nativeNotifications;
+  if (!Notifications || pushTokenSubscription || !canRegisterPushNotifications()) {
     return;
   }
 

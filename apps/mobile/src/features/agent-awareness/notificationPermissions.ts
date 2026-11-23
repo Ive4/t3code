@@ -1,10 +1,10 @@
-import * as Notifications from "expo-notifications";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Platform } from "react-native";
 import { msg } from "gt-react-native";
 
 import { m } from "../../i18n/messages";
+import { nativeNotifications } from "../../native/notifications";
 
 export type NotificationPermissionResult =
   | { readonly type: "unsupported" }
@@ -37,7 +37,8 @@ export const requestAgentNotificationPermission: Effect.Effect<
   NotificationPermissionResult,
   NotificationPermissionReadError | NotificationPermissionRequestError
 > = Effect.gen(function* () {
-  if (Platform.OS !== "ios" && Platform.OS !== "android") {
+  const Notifications = nativeNotifications;
+  if (!Notifications || (Platform.OS !== "ios" && Platform.OS !== "android")) {
     return { type: "unsupported" };
   }
 

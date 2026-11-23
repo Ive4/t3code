@@ -13,7 +13,7 @@ import { serverEnvironment } from "../../state/server";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useAuth } from "@clerk/expo";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import * as Notifications from "expo-notifications";
+import { nativeNotifications } from "../../native/notifications";
 import { useNavigation } from "@react-navigation/native";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -142,7 +142,10 @@ const notificationStatusAtom = makePermissionStatusAtom<NotificationStatus>({
   label: "mobile:notification-permission",
   initial: "checking",
   read: async () => {
-    if (Platform.OS !== "ios" && Platform.OS !== "android") return "unsupported";
+    const Notifications = nativeNotifications;
+    if (!Notifications || (Platform.OS !== "ios" && Platform.OS !== "android")) {
+      return "unsupported";
+    }
     const result = await settlePromise(() => Notifications.getPermissionsAsync());
     if (result._tag === "Failure") {
       reportAtomCommandResult(result, { label: "notification permission refresh" });

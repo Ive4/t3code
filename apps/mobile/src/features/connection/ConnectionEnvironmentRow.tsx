@@ -26,6 +26,7 @@ import { environmentPresentations } from "../../state/presentation";
 import { ConnectionDiagnosisDetails, useConnectionDiagnosis } from "./ConnectionDiagnosisDetails";
 import { ConnectionFormField } from "./ConnectionFormField";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
+import { EnvironmentIdentity } from "./EnvironmentListContent";
 import { environmentStatusText } from "./environmentStatusText";
 import type { MessageResolver } from "../../i18n/messages";
 
@@ -126,29 +127,25 @@ export function ConnectionEnvironmentRow(props: {
           accessibilityLabel={toggleLabel}
           onPress={props.onToggle}
         >
-          <View className="flex-row items-center gap-1.5">
-            <ConnectionStatusDot
-              state={enabled || unsupported ? props.environment.connectionState : "available"}
-              pulse={isRetrying}
-              size={8}
-            />
-            <EnvironmentMachineSymbol
-              kind={resolveEnvironmentMachineKind(serverConfig)}
-              size={14}
-              tintColorClassName="accent-foreground-muted"
-            />
-            <Text
-              className="min-w-0 flex-shrink text-base font-t3-bold leading-snug text-foreground"
-              numberOfLines={1}
-            >
-              {props.environment.environmentLabel}
-            </Text>
-          </View>
-          {!props.environment.isRelayManaged && props.environment.displayUrl.trim() ? (
-            <Text className="text-xs text-foreground-muted" numberOfLines={1}>
-              {props.environment.displayUrl}
-            </Text>
-          ) : null}
+          <EnvironmentIdentity
+            name={props.environment.environmentLabel}
+            address={props.environment.isRelayManaged ? "" : props.environment.displayUrl}
+            TextComponent={Text}
+            leading={
+              <>
+                <ConnectionStatusDot
+                  state={enabled || unsupported ? props.environment.connectionState : "available"}
+                  pulse={isRetrying}
+                  size={8}
+                />
+                <EnvironmentMachineSymbol
+                  kind={resolveEnvironmentMachineKind(serverConfig)}
+                  size={14}
+                  tintColorClassName="accent-foreground-muted"
+                />
+              </>
+            }
+          />
           {diagnosis ? (
             <>
               <Text className="text-xs text-danger-foreground">{diagnosis.headline}</Text>

@@ -118,6 +118,13 @@
     "apps/harmonyos": {
       // DevEco Studio loads the Hvigor files and supplies their native plugins.
       "ignore": ["hvigorfile.ts", "entry/hvigorfile.ts"],
+      // The native preparation CLI and Metro's shared entry, transformer, and aliases are loaded by path.
+      "entry": [
+        "scripts/prepare-shared-native.cjs",
+        "scripts/shared-harmony-transformer.cjs",
+        "src/shared/index.js",
+        "src/shared/ports/*.harmony.js",
+      ],
     },
     "apps/mobile": {
       // Expo loads plugins and the fingerprint config by string; Metro embeds the browser entry in the native WebView.
@@ -128,6 +135,7 @@
         "scripts/generate-device-stream.mts",
         "src/features/devices/device-stream.browser.ts!",
         "src/features/browser/preview-stream.browser.ts!",
+        "src/**/*.harmony.{ts,tsx}",
       ],
       // Fonts are configured as asset paths; Expo autolinks the native packages.
       "ignoreDependencies": [

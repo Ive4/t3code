@@ -1,6 +1,6 @@
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
+import { nativeNotifications } from "../../native/notifications";
 import type { AgentActivityProps } from "../../widgets/AgentActivity";
 import {
   getAgentLiveActivities,
@@ -13,6 +13,10 @@ export async function stageShowcaseAgentActivity(
   activity: AgentActivityProps,
   now: number,
 ): Promise<true | string> {
+  const Notifications = nativeNotifications;
+  if (!Notifications || (Platform.OS !== "ios" && Platform.OS !== "android")) {
+    return `unsupported platform ${Platform.OS}`;
+  }
   const permission = await Notifications.requestPermissionsAsync({
     ios: { allowAlert: true, allowBadge: true, allowSound: true },
   });
@@ -25,7 +29,6 @@ export async function stageShowcaseAgentActivity(
       "native showShowcaseActivity missing"
     );
   }
-  if (Platform.OS !== "ios") return `unsupported platform ${Platform.OS}`;
 
   await Promise.all(getAgentLiveActivities().map((existing) => existing.end("immediate")));
   // ActivityKit needs foreground startup; the runner locks only after this scene is ready.

@@ -44,6 +44,7 @@ import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSw
 import type { ThreadListProvider } from "../../state/thread-list-environments";
 import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
+import { ThreadListTitle } from "./ThreadListTitle";
 import { Menu } from "../../components/ui/Menu";
 import { EnvironmentMachineSymbol } from "../../components/EnvironmentMachineSymbol";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
@@ -1379,16 +1380,16 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             />
           </View>
         ) : null}
-        <Text
+        <ThreadListTitle
+          TextComponent={Text}
           className={cn(
-            "flex-1 text-base",
+            "flex-1",
             !recede && "font-t3-medium",
             selected
               ? selectedThreadRowColors.foregroundClassName
               : rowAppearance.foregroundClassName,
             isRegeneratingTitle && "opacity-55",
           )}
-          numberOfLines={2}
           onTextLayout={
             Platform.OS === "android"
               ? ({ nativeEvent }) => {
@@ -1401,7 +1402,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           }
         >
           {thread.title}
-        </Text>
+        </ThreadListTitle>
         <View className="flex-row items-center gap-1.5" style={{ minHeight: titleLineHeight }}>
           {props.hasQueuedMessages ? <QueuedMessageIcon selected={selected} /> : null}
           {pinnedRow ? (
@@ -1700,9 +1701,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             </View>
           ) : null}
           <View className="min-w-0 flex-1">
-            <Text
+            <ThreadListTitle
+              TextComponent={Text}
               className={cn(
-                "text-base",
                 selected
                   ? selectedThreadRowColors.foregroundClassName
                   : rowAppearance.mutedForegroundClassName,
@@ -1711,7 +1712,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               numberOfLines={1}
             >
               {thread.title}
-            </Text>
+            </ThreadListTitle>
             {providerNameLabel ? (
               <Text
                 className={cn(

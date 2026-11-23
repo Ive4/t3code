@@ -173,7 +173,7 @@ export const setPairingTokenOnUrl = (url: URL, credential: string): URL => {
   return next;
 };
 
-export const readHostedPairingRequest = (url: URL): HostedPairingRequest | null => {
+const readHostedPairingRequest = (url: URL): HostedPairingRequest | null => {
   const host = url.searchParams.get(HOSTED_PAIRING_HOST_PARAM)?.trim() ?? "";
   const token = getPairingTokenFromUrl(url)?.trim() ?? "";
   const label = url.searchParams.get(HOSTED_PAIRING_LABEL_PARAM)?.trim() ?? "";
@@ -212,6 +212,56 @@ export function readPairingQrPayload(payload: string): string | null {
     }
   } catch {}
   return trimmed;
+}
+
+function isIpLiteral(host: string): boolean {
+  try {
+    const hostname = new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, "");
+    if (hostname.includes(":")) return true;
+
+    const octets = hostname.split(".");
+    return (
+      octets.length === 4 &&
+      octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function buildPairingUrl(host: string, code: string): string {
+  const h = host.trim();
+  const c = code.trim();
+  if (!h) return "";
+  if (!c) return h;
+
+  try {
+    const url = new URL(h.includes("://") ? h : `${isIpLiteral(h) ? "http" : "https"}://${h}`);
+    url.hash = new URLSearchParams([["token", c]]).toString();
+    return url.toString();
+  } catch {
+    return `${h}#token=${c}`;
+  }
+}
+
+export function parsePairingUrl(url: string): { host: string; code: string } {
+  const trimmed = url.trim();
+  if (!trimmed) return { host: "", code: "" };
+
+  try {
+    const parsed = new URL(trimmed);
+    const hosted = readHostedPairingRequest(parsed);
+    if (hosted) return { host: hosted.host.replace(/\/$/, ""), code: hosted.token };
+
+    const hashParams = new URLSearchParams(parsed.hash.slice(1));
+    const code = hashParams.get("token") || parsed.searchParams.get("token") || "";
+    parsed.hash = "";
+    parsed.search = "";
+    parsed.pathname = "/";
+    return { host: parsed.toString().replace(/\/$/, ""), code };
+  } catch {
+    return { host: trimmed, code: "" };
+  }
 }
 
 export const resolveRemotePairingTarget = (input: {

@@ -8,7 +8,7 @@ import { WorkspaceSectionToolbar } from "./WorkspaceSectionToolbar";
 import { useNavigation } from "@react-navigation/native";
 import { useGT, useMessages } from "gt-react-native";
 import { use } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { Platform, View, useWindowDimensions } from "react-native";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { SafeAreaInsetsContext, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -39,6 +39,7 @@ import {
 import { WorkspaceToolbar } from "./WorkspaceToolbar";
 import {
   WORKSPACE_DOCK,
+  type WorkspaceTab,
   workspaceDockBottomClearance,
   workspaceUsesColumns,
 } from "./workspace-tabs-state";
@@ -55,23 +56,25 @@ const TAB_TITLES = WORKSPACE_TAB_LABELS;
 function WorkspaceRootTitle(props: {
   readonly columnWidth: number;
   readonly onOpenEnvironments: () => void;
+  readonly selectedTab: WorkspaceTab;
+  readonly settingsOpen: boolean;
 }) {
   const gt = useGT();
   const m = useMessages();
-  const { state, settingsOpen } = useWorkspaceTabs()!;
+  const { selectedTab, settingsOpen } = props;
   const maxWidth = Math.max(0, props.columnWidth - (use(HeaderItemsWidthContext) ?? 160));
   const enabled = useEnabledNavigationTabs();
   const tabTitle = settingsOpen
     ? gt("Settings")
     : enabled.length
-      ? m(TAB_TITLES[state.selectedTab])
+      ? m(TAB_TITLES[selectedTab])
       : gt("Navigation", { $context: "screen title when every navigation tab is hidden" });
   return (
     <View style={{ width: maxWidth, minHeight: 32, justifyContent: "center" }}>
       <WorkspaceConnectionTitle
         brand={
-          !settingsOpen && isSharedSlotTab(state.selectedTab) ? (
-            <SharedSlotTitle tab={state.selectedTab} />
+          !settingsOpen && isSharedSlotTab(selectedTab) ? (
+            <SharedSlotTitle tab={selectedTab} />
           ) : (
             <CompactBrandTitle
               accessibilityLabel={gt("{product}, {title}", { product: "T3 Code", title: tabTitle })}
@@ -113,11 +116,14 @@ function WorkspaceRootContent() {
   const { state } = workspace;
   // Settings is a workspace tab too; its list takes the place of the selected tab's.
   const settingsOpen = workspace.settingsOpen;
+  const harmony = String(Platform.OS) === "harmony";
   const headerOnly = use(NativeWorkspaceTabActivityContext)?.headerOnly === true;
   const renderHeaderTitle = () => (
     <WorkspaceRootTitle
       columnWidth={width}
       onOpenEnvironments={() => openSettings(navigation, "SettingsEnvironments")}
+      selectedTab={state.selectedTab}
+      settingsOpen={settingsOpen}
     />
   );
   const tab = state.tabs[settingsOpen ? "settings" : state.selectedTab];
@@ -156,7 +162,7 @@ function WorkspaceRootContent() {
                 : gt("Navigation", {
                     $context: "screen title when every navigation tab is hidden",
                   }),
-            headerShown: true,
+            headerShown: !harmony,
             headerTransparent: NATIVE_LIQUID_GLASS_SUPPORTED,
             headerStyle: NATIVE_LIQUID_GLASS_SUPPORTED
               ? { backgroundColor: "transparent" }
@@ -174,7 +180,7 @@ function WorkspaceRootContent() {
                 : undefined,
           }}
         />
-        <SafeAreaInsetsContext value={compactTabs ? { ...insets, bottom: 0 } : insets}>
+        <SafeAreaInsetsContext value={compactTabs || harmony ? { ...insets, bottom: 0 } : insets}>
           {/* Usage draws its own header, and skips its body itself. */}
           {headerOnly && (settingsOpen || state.selectedTab !== "usage") ? null : settingsOpen ? (
             <WorkspaceSettingsList />
@@ -190,10 +196,12 @@ function WorkspaceRootContent() {
             <WorkspaceExtraTab tab={state.selectedTab} />
           )}
         </SafeAreaInsetsContext>
-        {deviceType !== "pad" && deviceType !== "phone" && sidebarPicker ? (
+        {harmony ? (
+          <WorkspaceTabDock placement="window" />
+        ) : deviceType !== "pad" && deviceType !== "phone" && sidebarPicker ? (
           <WorkspaceTabDock placement="column" />
         ) : null}
-        {enabled.length === 0 && !settingsOpen ? null : settingsOpen ||
+        {harmony || (enabled.length === 0 && !settingsOpen) ? null : settingsOpen ||
           workspaceUsesColumns(state.selectedTab) ? (
           <WorkspaceToolbar sidebar={sidebarNavigation} onNewTask={startNewTask} />
         ) : (

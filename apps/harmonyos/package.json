@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "bundle": "node scripts/bundle.cjs",
+    "bundle:shared": "node scripts/bundle-shared.cjs",
     "typecheck": "effect-tsgo tsrs --noEmit"
   },
   "dependencies": {

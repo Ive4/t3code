@@ -1,5 +1,6 @@
-import * as Notifications from "expo-notifications";
+import type { NotificationResponse } from "expo-notifications";
 
+import { nativeNotifications } from "../../native/notifications";
 import { setAndroidThreadOnScreen } from "./androidNotifications";
 import { foregroundNotificationBehavior } from "./foregroundNotificationBehavior";
 import { routeAgentNotificationResponseOnce, threadDeepLinkOnScreen } from "./notificationPayload";
@@ -19,13 +20,15 @@ export function setAgentNotificationPathname(pathname: string): void {
  * notification's deep link through `navigate`.
  */
 export function installAgentNotificationNavigation(navigate: (href: string) => void): () => void {
+  const Notifications = nativeNotifications;
+  if (!Notifications) return () => undefined;
   const handledResponseIds = new Set<string>();
   Notifications.setNotificationHandler({
     handleNotification: (notification) =>
       Promise.resolve(foregroundNotificationBehavior(notification, deepLinkOnScreen)),
   });
 
-  const handleResponse = (response: Notifications.NotificationResponse): void => {
+  const handleResponse = (response: NotificationResponse): void => {
     routeAgentNotificationResponseOnce({ handledResponseIds, response, navigate });
   };
   const subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);

@@ -12,6 +12,7 @@ import {
 import type { ProviderUserInputAnswers } from "@t3tools/contracts";
 import { useState } from "react";
 import { Button, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useWorkspaceTheme } from "./WorkspaceUi";
 
 export function PendingQuestions({
   request,
@@ -31,13 +32,17 @@ export function PendingQuestions({
   );
   const answers = buildPendingUserInputAnswers(request.questions, draft);
   const unavailable = request.responseCapability === "not_resumable";
+  const theme = useWorkspaceTheme();
+  const foreground = { color: theme["--color-foreground"] };
+  const muted = { color: theme["--color-foreground-muted"] };
+  const border = { borderColor: theme["--color-border-subtle"] };
 
   return (
     <View style={styles.card}>
       <ScrollView style={styles.questions} keyboardShouldPersistTaps="handled">
         {request.questions.map((question) => (
           <View key={question.id} style={styles.question}>
-            <Text style={styles.heading}>{question.question}</Text>
+            <Text style={[styles.heading, foreground]}>{question.question}</Text>
             {question.options.map((option) => {
               const value = option.value ?? option.label;
               const checked = isPendingUserInputOptionSelected(question, draft[question.id], value);
@@ -57,11 +62,18 @@ export function PendingQuestions({
                       ),
                     }))
                   }
-                  style={[styles.option, checked && styles.selected]}
+                  style={[
+                    styles.option,
+                    border,
+                    checked && {
+                      backgroundColor: theme["--color-thread-selected"],
+                      borderColor: theme["--color-focus"],
+                    },
+                  ]}
                 >
-                  <Text style={styles.heading}>{option.label}</Text>
+                  <Text style={[styles.heading, foreground]}>{option.label}</Text>
                   {option.description !== option.label && (
-                    <Text style={styles.body}>{option.description}</Text>
+                    <Text style={muted}>{option.description}</Text>
                   )}
                 </Pressable>
               );
@@ -70,6 +82,7 @@ export function PendingQuestions({
               <TextInput
                 accessibilityLabel={question.question}
                 placeholder={labels.answer}
+                placeholderTextColor={theme["--color-placeholder"]}
                 editable={!disabled && !unavailable}
                 multiline
                 value={draft[question.id]?.customAnswer ?? ""}
@@ -83,14 +96,14 @@ export function PendingQuestions({
                     ),
                   }))
                 }
-                style={[styles.option, styles.body]}
+                style={[styles.option, border, foreground]}
               />
             )}
           </View>
         ))}
       </ScrollView>
       {unavailable ? (
-        <Text style={styles.body}>{labels.requestExpired}</Text>
+        <Text style={muted}>{labels.requestExpired}</Text>
       ) : (
         <View style={styles.actions}>
           <Button
@@ -110,12 +123,10 @@ export function PendingQuestions({
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 8 },
+  card: { gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
   questions: { maxHeight: 280 },
   question: { gap: 6, marginBottom: 10 },
-  heading: { color: "#171717", fontWeight: "600" },
-  body: { color: "#383838" },
-  option: { borderWidth: 1, borderColor: "#8b8b8b", borderRadius: 8, padding: 10 },
-  selected: { backgroundColor: "#def0fa", borderColor: "#16658d" },
+  heading: { fontWeight: "600" },
+  option: { borderWidth: 1, borderRadius: 8, padding: 10 },
   actions: { flexDirection: "row", gap: 8 },
 });

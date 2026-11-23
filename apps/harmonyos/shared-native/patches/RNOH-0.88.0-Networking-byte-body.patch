@@ -1,0 +1,16 @@
+diff --git a/src/main/ets/RNOHCorePackage/turboModules/Networking/NetworkingTurboModule.ts b/src/main/ets/RNOHCorePackage/turboModules/Networking/NetworkingTurboModule.ts
+index 87d23049a6..c9442e278d 100644
+--- a/src/main/ets/RNOHCorePackage/turboModules/Networking/NetworkingTurboModule.ts
++++ b/src/main/ets/RNOHCorePackage/turboModules/Networking/NetworkingTurboModule.ts
+@@ -203,9 +203,8 @@ export class NetworkingTurboModule extends AnyThreadTurboModule {
+     }
+     if ('base64' in data) {
+       const base64 = data.base64 as string;
+-      const textEncoder = new util.TextEncoder();
+-      const byteArray = textEncoder.encodeInto(base64);
+-      return byteArray.buffer;
++      const bytes = this.base64Helper.decodeSync(base64);
++      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+     }
+     if (Object.keys(data).length === 0) {
+       return undefined;

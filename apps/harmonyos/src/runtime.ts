@@ -25,10 +25,17 @@ import { createEnvironmentCatalogAtoms } from "@t3tools/client-runtime/state/con
 import { createServerEnvironmentAtoms } from "@t3tools/client-runtime/state/server";
 import { createEnvironmentSessionAtoms } from "@t3tools/client-runtime/state/session";
 import {
+  createPullRequestEnvironmentAtoms,
+  PullRequestDiffLoader,
+} from "@t3tools/client-runtime/state/pull-requests";
+import { createIssueEnvironmentAtoms } from "@t3tools/client-runtime/state/issues";
+import { createOrchestrationEnvironmentAtoms } from "@t3tools/client-runtime/state/orchestration";
+import {
   createEnvironmentRpcCommand,
+  createEnvironmentRpcQueryAtomFamily,
   createRuntimeCommand,
 } from "@t3tools/client-runtime/state/runtime";
-import { ORCHESTRATION_V2_WS_METHODS } from "@t3tools/contracts";
+import { ORCHESTRATION_V2_WS_METHODS, WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -135,10 +142,11 @@ const platform = Layer.mergeAll(
 );
 
 const runtime = Atom.runtime(
-  Layer.merge(ShellSnapshotLoader.layer, BoundedThreadSnapshotLoader.layer).pipe(
-    Layer.provideMerge(Connection.layer),
-    Layer.provideMerge(platform),
-  ),
+  Layer.mergeAll(
+    ShellSnapshotLoader.layer,
+    BoundedThreadSnapshotLoader.layer,
+    PullRequestDiffLoader.layer,
+  ).pipe(Layer.provideMerge(Connection.layer), Layer.provideMerge(platform)),
 );
 
 export const catalog = createEnvironmentCatalogAtoms(runtime);
@@ -161,3 +169,21 @@ export const dispatch = createEnvironmentRpcCommand(runtime, {
   label: "harmonyos:dispatch",
   tag: ORCHESTRATION_V2_WS_METHODS.dispatchCommand,
 });
+
+export const pullRequests = createPullRequestEnvironmentAtoms(runtime);
+export const issues = createIssueEnvironmentAtoms(runtime);
+export const orchestration = createOrchestrationEnvironmentAtoms(runtime, {
+  shellState: shell.stateValueAtom,
+});
+export const files = {
+  list: createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "harmonyos:files:list",
+    tag: WS_METHODS.projectsListEntries,
+    staleTimeMs: 30_000,
+  }),
+  read: createEnvironmentRpcQueryAtomFamily(runtime, {
+    label: "harmonyos:files:read",
+    tag: WS_METHODS.projectsReadFile,
+    staleTimeMs: 30_000,
+  }),
+};

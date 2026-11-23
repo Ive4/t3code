@@ -1,11 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
 import { useLocale, useMessages } from "gt-react-native";
-import * as Linking from "expo-linking";
 import { useEffect, useEffectEvent } from "react";
 import { Platform } from "react-native";
 import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { environmentCatalog } from "../connection/catalog";
+import * as Linking from "../native/appLinking";
 import { environmentPresentations } from "../state/presentation";
 import { republishAgentActivityWidget } from "./publishAgentActivityWidget";
 import { publishSubscriptionUsage } from "./publishSubscriptionUsage";

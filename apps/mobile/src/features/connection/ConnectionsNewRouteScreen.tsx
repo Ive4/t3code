@@ -4,18 +4,12 @@ import { ListRow } from "../../components/ui/ListRow";
 import * as Dialog from "../../components/ui/Dialog";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useAuth } from "@clerk/expo";
-import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import {
-  StackActions,
-  useIsFocused,
-  useNavigation,
-  type StaticScreenProps,
-} from "@react-navigation/native";
+import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import { useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { cn } from "../../lib/cn";
@@ -25,6 +19,7 @@ import { SettingsScreen } from "../settings/components/SettingsScreen";
 import { AppText as Text, AppTextInput, type AppTextInputProps } from "../../components/ui/AppText";
 import { FrostedCutout } from "../../components/ui/FrostedCutout";
 import { buildPairingUrl, extractPairingUrlFromQrPayload, parsePairingUrl } from "./pairing";
+import { usePairingCamera } from "./usePairingCamera";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { hasCloudPublicConfig } from "../cloud/publicConfig";
@@ -92,13 +87,11 @@ function PairingForm({
   );
   const connecting = isSubmitting || autoConnect.connecting;
   const pairingConnectionError = submitError ?? autoConnect.error;
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const screenFocused = useIsFocused();
   const [scannerLocked, setScannerLocked] = useState(false);
   // A good scan parks the camera so it can't re-read the code over later edits.
   const [scanComplete, setScanComplete] = useState(false);
 
-  const headerIconColor = useUniwindTheme()["--color-icon"];
+  const theme = useUniwindTheme();
 
   const connectDisabled = connecting || hostInput.trim().length === 0;
 
@@ -121,23 +114,6 @@ function PairingForm({
   const handleCodeChange = (value: string) => {
     setCodeInput(value);
     clearError();
-  };
-
-  const handleScanPress = async () => {
-    const permission = await requestCameraPermission();
-    if (permission.granted) {
-      setScanComplete(false);
-      return;
-    }
-    if (permission.canAskAgain) return;
-    Dialog.alert(
-      gt("Camera access needed"),
-      gt("Camera access was denied for this app. Open Settings to enable it."),
-      [
-        { text: gt("Cancel"), style: "cancel" },
-        { text: gt("Open Settings"), onPress: () => void Linking.openSettings() },
-      ],
-    );
   };
 
   const handleQrScan = ({ data }: { readonly data: string }) => {
@@ -168,6 +144,12 @@ function PairingForm({
       }, 600);
     }
   };
+
+  const camera = usePairingCamera({
+    scanComplete,
+    onRestart: () => setScanComplete(false),
+    onScan: handleQrScan,
+  });
 
   const handleSubmit = async () => {
     const pairingUrl = buildPairingUrl(hostInput, codeInput);
@@ -208,7 +190,7 @@ function PairingForm({
             : gt("Add environment"),
           loading: connecting,
           icon: "checkmark",
-          tintColor: headerIconColor,
+          tintColor: theme["--color-icon"],
           disabled: connectDisabled,
           onPress: () => {
             void handleSubmit();
@@ -229,13 +211,7 @@ function PairingForm({
         }}
       >
         <View collapsable={false} className="gap-6.5">
-          <PairingScanCard
-            cameraActive={cameraPermission?.granted === true && screenFocused && !scanComplete}
-            onScan={handleQrScan}
-            onScanPress={() => {
-              void handleScanPress();
-            }}
-          />
+          <PairingScanCard cameraPreview={camera.preview} onScanPress={() => void camera.scan()} />
 
           <View collapsable={false} className="gap-2">
             <Text className="px-4 text-sm font-t3-medium text-foreground-muted">
@@ -299,17 +275,17 @@ const SCAN_RETICLE_TOP = 36;
 const SCAN_RETICLE_RADIUS = 28;
 
 function PairingScanCard(props: {
-  readonly cameraActive: boolean;
-  readonly onScan: (result: { readonly data: string }) => void;
+  readonly cameraPreview: ReactNode;
   readonly onScanPress: () => void;
 }) {
   const gt = useGT();
   const light = useAppearancePreferences().themeAppearance === "light";
+  const cameraActive = props.cameraPreview != null;
   return (
     <Pressable
-      accessibilityRole={props.cameraActive ? undefined : "button"}
-      accessibilityLabel={props.cameraActive ? undefined : gt("Scan QR code")}
-      disabled={props.cameraActive}
+      accessibilityRole={cameraActive ? undefined : "button"}
+      accessibilityLabel={cameraActive ? undefined : gt("Scan QR code")}
+      disabled={cameraActive}
       onPress={props.onScanPress}
       className={cn(
         "overflow-hidden rounded-[26px] border-continuous",
@@ -327,14 +303,9 @@ function PairingScanCard(props: {
         <Rect fill="url(#pairing-scan-backdrop)" height="100%" width="100%" />
       </Svg>
 
-      {props.cameraActive ? (
+      {cameraActive ? (
         <>
-          <CameraView
-            active
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={props.onScan}
-            style={StyleSheet.absoluteFill}
-          />
+          {props.cameraPreview}
           <FrostedCutout
             cutoutTop={SCAN_RETICLE_TOP}
             cutoutWidth={SCAN_RETICLE_SIZE}
@@ -361,7 +332,7 @@ function PairingScanCard(props: {
             width: SCAN_RETICLE_SIZE,
           }}
         >
-          {props.cameraActive ? null : (
+          {cameraActive ? null : (
             <>
               <SymbolView
                 name="qrcode.viewfinder"

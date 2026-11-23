@@ -16,7 +16,7 @@ vi.mock("react-native", () => ({
   View: Children,
   Pressable: Children,
   Linking: { openSettings: vi.fn() },
-  StyleSheet: { absoluteFill: {} },
+  StyleSheet: { absoluteFill: {}, create: (styles: object) => styles },
 }));
 vi.mock("react-native-svg", () => ({
   default: Children,

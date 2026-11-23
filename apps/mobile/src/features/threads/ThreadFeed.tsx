@@ -1,4 +1,5 @@
 import { CollapsibleUserMessageBody } from "./CollapsibleUserMessageBody";
+import { UserMessageBubble } from "./UserMessageBubble";
 import { msg, T, useGT, useLocale, useMessages } from "gt-react-native";
 import { m } from "../../i18n/messages";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
@@ -2445,10 +2446,9 @@ function renderFeedEntry(
             </View>
           ) : null}
           {hasBubble ? (
-            <View
-              className="min-w-0 rounded-[20px]"
+            <UserMessageBubble
+              color={userBubbleColor}
               style={{
-                backgroundColor: userBubbleColor,
                 maxWidth: props.duoColumns ? "85%" : props.userBubbleMaxWidth,
                 ...(!bubbleBodyVisible
                   ? null
@@ -2576,7 +2576,7 @@ function renderFeedEntry(
                   ) : null}
                 </View>
               ) : null}
-            </View>
+            </UserMessageBubble>
           ) : null}
           {bubbleBodyVisible ? (
             <View className="mt-1 flex-row items-center justify-end gap-1 pr-0.5">

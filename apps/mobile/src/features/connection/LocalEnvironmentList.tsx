@@ -1,13 +1,18 @@
 import { T } from "gt-react-native";
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { ComponentProps } from "react";
-import { View } from "react-native";
+import { View, type ViewProps } from "react-native";
 
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ConnectionEnvironmentRow } from "./ConnectionEnvironmentRow";
+import { EnvironmentListCard } from "./EnvironmentListContent";
 
 type EnvironmentRowProps = ComponentProps<typeof ConnectionEnvironmentRow>;
+
+function GroupedCard(props: ViewProps) {
+  return <View {...props} className="bg-grouped-card" />;
+}
 
 export function LocalEnvironmentList({
   environments,
@@ -48,7 +53,7 @@ export function LocalEnvironmentList({
   }
 
   return (
-    <View collapsable={false} className="overflow-hidden rounded-[24px] bg-grouped-card">
+    <EnvironmentListCard ViewComponent={GroupedCard}>
       {environments.map((environment) => (
         <View key={environment.environmentId} collapsable={false}>
           <ConnectionEnvironmentRow
@@ -59,6 +64,6 @@ export function LocalEnvironmentList({
           />
         </View>
       ))}
-    </View>
+    </EnvironmentListCard>
   );
 }

@@ -7,6 +7,10 @@ const appVariant: unknown = Constants.expoConfig?.extra?.appVariant;
 
 export const crashReportingAvailable = typeof relayUrl === "string" && relayUrl.trim() !== "";
 
+export function reportRenderError(error: unknown) {
+  Observe.reportError(error);
+}
+
 interface PromiseRejectionTracker {
   readonly enablePromiseRejectionTracker?: (options: {
     readonly allRejections: boolean;
