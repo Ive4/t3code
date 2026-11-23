@@ -1,0 +1,30 @@
+{
+  "name": "@t3tools/harmonyos",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "bundle": "node scripts/bundle.cjs",
+    "typecheck": "effect-tsgo tsrs --noEmit"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.29.7",
+    "@effect/atom-react": "catalog:",
+    "@exodus/bytes": "1.15.1",
+    "@react-native-oh/react-native-harmony": "0.86.1",
+    "@t3tools/client-runtime": "workspace:*",
+    "@t3tools/contracts": "workspace:*",
+    "@t3tools/shared": "workspace:*",
+    "effect": "catalog:",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-url-polyfill": "3.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/plugin-transform-export-namespace-from": "^7.27.1",
+    "@react-native/babel-preset": "0.86.3",
+    "@react-native/metro-config": "0.88.1",
+    "@types/react": "catalog:",
+    "metro": "0.87.1"
+  }
+}

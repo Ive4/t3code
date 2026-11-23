@@ -115,6 +115,10 @@
       // `astro check` runs from the typecheck task in vite.config.ts, which knip does not read.
       "ignoreDependencies": ["@astrojs/check"],
     },
+    "apps/harmonyos": {
+      // DevEco Studio loads the Hvigor files and supplies their native plugins.
+      "ignore": ["hvigorfile.ts", "entry/hvigorfile.ts"],
+    },
     "apps/mobile": {
       // Expo loads plugins and the fingerprint config by string; Metro embeds the browser entry in the native WebView.
       "entry": [

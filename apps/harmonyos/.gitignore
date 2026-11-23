@@ -1,3 +1,6 @@
 /.hvigor/
 /local.properties
+/entry/build/
+/entry/.cxx/
+/entry/src/main/resources/rawfile/bundle.harmony.js
 oh_modules/

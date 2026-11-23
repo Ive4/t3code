@@ -1,10 +1,8 @@
-import { readHostedPairingRequest } from "@t3tools/shared/remote";
+import { readHostedPairingRequest, readPairingQrPayload } from "@t3tools/shared/remote";
 import * as Schema from "effect/Schema";
 import { msg } from "gt-react-native";
 
 import { m } from "../../i18n/messages";
-
-const MOBILE_PAIRING_URL_PARAM = "pairingUrl";
 
 function isIpLiteral(host: string): boolean {
   try {
@@ -74,20 +72,7 @@ export function parsePairingUrl(url: string): { host: string; code: string } {
 }
 
 export function extractPairingUrlFromQrPayload(payload: string): string {
-  const trimmed = payload.trim();
-  if (!trimmed) {
-    throw new PairingQrPayloadEmptyError({});
-  }
-
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol === "t3code:") {
-      const pairingUrl = url.searchParams.get(MOBILE_PAIRING_URL_PARAM)?.trim() ?? "";
-      if (pairingUrl.length > 0) {
-        return pairingUrl;
-      }
-    }
-  } catch {}
-
-  return trimmed;
+  const pairingUrl = readPairingQrPayload(payload);
+  if (!pairingUrl) throw new PairingQrPayloadEmptyError({});
+  return pairingUrl;
 }

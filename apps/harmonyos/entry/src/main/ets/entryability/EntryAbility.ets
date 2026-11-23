@@ -1,13 +1,11 @@
-import { UIAbility } from '@kit.AbilityKit';
-import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window } from '@kit.ArkUI';
+import { RNAbility } from '@rnoh/react-native-openharmony';
 
-export default class EntryAbility extends UIAbility {
-  onWindowStageCreate(windowStage: window.WindowStage): void {
-    windowStage.loadContent('pages/Index', (error) => {
-      if (error.code) {
-        hilog.error(0x0000, 'EntryAbility', 'Unable to load the home page: %{public}d', error.code);
-      }
-    });
+export default class EntryAbility extends RNAbility {
+  override getPagePath(): string {
+    return 'pages/Index';
+  }
+
+  override getRNOHWorkerScriptUrl(): string {
+    return 'entry/ets/workers/RNOHWorker.ets';
   }
 }

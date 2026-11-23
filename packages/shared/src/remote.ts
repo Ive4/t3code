@@ -202,6 +202,18 @@ export const readPairingAppLink = (value: string): string | null => {
   return url.searchParams.get(PAIRING_APP_LINK_PARAM)?.trim() || null;
 };
 
+export function readPairingQrPayload(payload: string): string | null {
+  const trimmed = payload.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol === "t3code:") {
+      return url.searchParams.get("pairingUrl")?.trim() || trimmed;
+    }
+  } catch {}
+  return trimmed;
+}
+
 export const resolveRemotePairingTarget = (input: {
   readonly pairingUrl?: string;
   readonly host?: string;
