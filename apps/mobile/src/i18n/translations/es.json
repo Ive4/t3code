@@ -2045,6 +2045,7 @@
   "e1cb1c8599e84e26": "Crea un código de emparejamiento en {environment}, en sus Ajustes → Compartir y acceso o con `t3 auth pairing create`, e introdúcelo aquí.",
   "7d6f419f8ab7f779": "Para máquinas de tu red local o tailnet. La máquina conserva sus propias credenciales de proveedores.",
   "36f32bd159bdc0d1": "Escanear código QR",
+  "de60f4cf1f60925e": "No se pudo escanear el código QR de emparejamiento.",
   "11fd02455d938901": "Escanea el código de {command} o de los ajustes de Conexiones del escritorio",
   "68b43e17c7e5f4b3": "Iniciar sesión en {product}",
   "bbe65d8eb3dc2af7": "Accede a tus máquinas desde cualquier lugar, sin configurar la red.",

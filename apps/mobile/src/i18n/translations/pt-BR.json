@@ -2045,6 +2045,7 @@
   "e1cb1c8599e84e26": "Crie um código de pareamento em {environment}, em Configurações → Compartilhamento e acesso ou com `t3 auth pairing create`, e insira-o aqui.",
   "7d6f419f8ab7f779": "Para máquinas na sua rede local ou tailnet. A máquina mantém as próprias credenciais dos provedores.",
   "36f32bd159bdc0d1": "Escanear QR code",
+  "de60f4cf1f60925e": "Não foi possível escanear o código QR de pareamento.",
   "11fd02455d938901": "Escaneie o código de {command} ou das configurações de Conexões do desktop",
   "68b43e17c7e5f4b3": "Entrar no {product}",
   "bbe65d8eb3dc2af7": "Acesse suas máquinas de qualquer lugar, sem configurar a rede.",

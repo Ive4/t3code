@@ -13,17 +13,14 @@ export function usePairingCamera({ onScan }: PairingCameraOptions) {
   const pending = useRef(false);
 
   async function scan() {
-    const scanner = TurboModuleRegistry.get<PairingScanner>("T3PairingScanner");
-    if (!scanner || pending.current) return;
+    if (pending.current) return;
     pending.current = true;
     await Promise.resolve()
-      .then(() => scanner.scan())
+      .then(() => TurboModuleRegistry.getEnforcing<PairingScanner>("T3PairingScanner").scan())
       .then((data) => {
         if (data !== null) onScan({ data });
       })
-      .catch((error: unknown) => {
-        Dialog.alert(gt("Scan QR code"), error instanceof Error ? error.message : gt("Try again"));
-      })
+      .catch(() => Dialog.alert(gt("Scan QR code"), gt("Could not scan a pairing QR code.")))
       .finally(() => {
         pending.current = false;
       });

@@ -2045,6 +2045,7 @@
   "e1cb1c8599e84e26": "Créez un code d’appairage sur {environment}, dans ses Paramètres → Partage et accès ou avec `t3 auth pairing create`, puis saisissez-le ici.",
   "7d6f419f8ab7f779": "Pour les machines de votre réseau local ou de votre tailnet. La machine garde ses propres identifiants de fournisseur.",
   "36f32bd159bdc0d1": "Scanner un code QR",
+  "de60f4cf1f60925e": "Impossible de scanner le code QR d’appairage.",
   "11fd02455d938901": "Scannez le code de {command} ou des paramètres Connexions du bureau",
   "68b43e17c7e5f4b3": "Se connecter à {product}",
   "bbe65d8eb3dc2af7": "Accédez à vos machines de partout, sans configuration réseau.",

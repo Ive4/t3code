@@ -1,4 +1,4 @@
-import { resolveLocaleSelection } from "@t3tools/client-runtime/locales";
+import { resolveLocaleSelection, SYSTEM_LANGUAGE } from "@t3tools/client-runtime/locales";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { GTProvider, initializeGT, useLocale } from "gt-react-native";
@@ -10,6 +10,7 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "./locales";
 import { setActiveLocale } from "./messages";
 
 const FormattingLocaleContext = createContext(DEFAULT_LOCALE);
+const unsavedLanguage = String(Platform.OS) === "harmony" ? SYSTEM_LANGUAGE : DEFAULT_LOCALE;
 
 export function useFormattingLocale(): string {
   return use(FormattingLocaleContext);
@@ -57,8 +58,8 @@ function readSystemLocales(): ReadonlyArray<string> {
 export function useLanguagePreference(): string {
   const preferences = useAtomValue(mobilePreferencesAtom);
   return AsyncResult.isSuccess(preferences)
-    ? (preferences.value.language ?? DEFAULT_LOCALE)
-    : DEFAULT_LOCALE;
+    ? (preferences.value.language ?? unsavedLanguage)
+    : unsavedLanguage;
 }
 
 /** Translates the app into the saved language; "system" follows the device. Mounted once in App. */

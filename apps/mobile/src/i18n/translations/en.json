@@ -2045,6 +2045,7 @@
   "e1cb1c8599e84e26": "Create a pairing code on {environment}, in its Settings → Sharing & access or with `t3 auth pairing create`, and enter it here.",
   "7d6f419f8ab7f779": "For machines on your local network or tailnet. The machine keeps its own provider credentials.",
   "36f32bd159bdc0d1": "Scan QR code",
+  "de60f4cf1f60925e": "Could not scan a pairing QR code.",
   "11fd02455d938901": "Scan the code from {command} or desktop Connections settings",
   "68b43e17c7e5f4b3": "Sign in to {product}",
   "bbe65d8eb3dc2af7": "Reach your machines from anywhere, no network setup.",

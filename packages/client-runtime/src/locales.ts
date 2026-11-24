@@ -19,14 +19,17 @@ export function nativeLanguageName(locale: string): string {
 }
 
 // Our `zh` is Simplified, so Traditional tags only match an exact locale.
-const TRADITIONAL_CHINESE = /^zh[-_](hant|tw|hk|mo)\b/;
+const TRADITIONAL_CHINESE = /^zh-(hant|tw|hk|mo)(?:-|$)/;
 
 function matchSupportedLocale(tag: string, supported: ReadonlyArray<string>): string | undefined {
-  const normalized = tag.trim().toLowerCase();
-  const language = normalized.split(/[-_]/)[0];
+  const normalized = tag.trim().toLowerCase().replaceAll("_", "-");
   const exact = supported.find((locale) => locale.toLowerCase() === normalized);
   if (exact || TRADITIONAL_CHINESE.test(normalized)) return exact;
-  return supported.find((locale) => locale.toLowerCase() === language);
+  const [language, scriptOrRegion, regionAfterScript] = normalized.split("-");
+  const region = scriptOrRegion?.length === 4 ? regionAfterScript : scriptOrRegion;
+  const regional =
+    region && supported.find((locale) => locale.toLowerCase() === `${language}-${region}`);
+  return regional || supported.find((locale) => locale.toLowerCase() === language);
 }
 
 /** Saved setting to active locale; "system" and unknown values follow the host's languages. */

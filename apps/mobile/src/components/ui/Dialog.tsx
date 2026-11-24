@@ -1,13 +1,15 @@
 import { msg } from "gt-react-native";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 
 import { m } from "../../i18n/messages";
 import type { ConfirmDialogRequest, TextInputDialogRequest } from "./Dialog.types";
 
 export type { ConfirmDialogRequest, TextInputDialogRequest } from "./Dialog.types";
 
-export function alert(...args: Parameters<typeof Alert.alert>): void {
-  Alert.alert(...args);
+export function alert(...[title, message, buttons, options]: Parameters<typeof Alert.alert>): void {
+  const actions =
+    String(Platform.OS) === "harmony" && !buttons?.length ? [{ text: m(msg("OK")) }] : buttons;
+  Alert.alert(title, message, actions, options);
 }
 
 export function confirm(request: ConfirmDialogRequest): void {
