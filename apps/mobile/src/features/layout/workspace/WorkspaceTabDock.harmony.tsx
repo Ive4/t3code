@@ -1,5 +1,6 @@
 import { useGT, useMessages } from "gt-react-native";
 import { Pressable, View } from "react-native";
+import Animated, { cubicBezier, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppText } from "../../../components/ui/AppText";
@@ -15,6 +16,8 @@ import {
 import { useSelectWorkspaceTab } from "./useSelectWorkspaceTab";
 import { useWorkspaceTabs } from "./WorkspaceTabsContext";
 
+const PRESS_EASING = cubicBezier(0.23, 1, 0.32, 1);
+
 export function WorkspaceTabDock(_props: { readonly placement: "column" | "window" }) {
   const gt = useGT();
   const m = useMessages();
@@ -22,6 +25,7 @@ export function WorkspaceTabDock(_props: { readonly placement: "column" | "windo
   const selectTab = useSelectWorkspaceTab();
   const order = useNavigationTabOrder();
   const hidden = useHiddenNavigationTabs();
+  const reduceMotion = useReducedMotion();
   const { bottom } = useSafeAreaInsets();
   if (!workspace) return null;
 
@@ -48,19 +52,32 @@ export function WorkspaceTabDock(_props: { readonly placement: "column" | "windo
             accessibilityLabel={label}
             accessibilityState={{ selected: active }}
             onPress={() => selectTab(tab)}
-            className="min-h-14 min-w-0 flex-1 items-center justify-center gap-1 px-1"
+            className="min-h-14 min-w-0 flex-1 justify-center px-1"
           >
-            <SymbolView
-              name={tab === "settings" ? "gearshape" : NAVIGATION_TAB_ICONS[tab]}
-              size={22}
-              tintColorClassName={active ? "accent-primary" : "accent-header-foreground"}
-            />
-            <AppText
-              className={cn("text-xs", active ? "text-primary" : "text-header-foreground")}
-              numberOfLines={1}
-            >
-              {label}
-            </AppText>
+            {({ pressed }) => (
+              <Animated.View
+                className="items-center gap-1"
+                style={{
+                  opacity: pressed ? 0.75 : 1,
+                  transform: [{ scale: pressed && !reduceMotion ? 0.97 : 1 }],
+                  transitionProperty: ["opacity", "transform"],
+                  transitionDuration: reduceMotion ? 0 : 120,
+                  transitionTimingFunction: PRESS_EASING,
+                }}
+              >
+                <SymbolView
+                  name={tab === "settings" ? "gearshape" : NAVIGATION_TAB_ICONS[tab]}
+                  size={22}
+                  tintColorClassName={active ? "accent-primary" : "accent-header-foreground"}
+                />
+                <AppText
+                  className={cn("text-xs", active ? "text-primary" : "text-header-foreground")}
+                  numberOfLines={1}
+                >
+                  {label}
+                </AppText>
+              </Animated.View>
+            )}
           </Pressable>
         );
       })}

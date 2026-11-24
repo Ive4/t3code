@@ -157,6 +157,7 @@ import { immersiveRoute, modalRoute, pageRoute, sheetRoute } from "./features/la
 import { deriveLayout } from "./lib/layout";
 import { useNativeLayoutMetrics } from "./native/native-layout-metrics";
 import { isPresentedRoute } from "./native/workspace-stack-projection";
+import { StackScreenTransition } from "./features/layout/StackScreenTransition";
 import { workspaceDetailRouter } from "./features/layout/workspace/workspace-detail-selection";
 
 const settingsPage = () => pageRoute({ itemStyle: "standard" });
@@ -885,7 +886,11 @@ function GuardedScreenLayout(props: {
         <ScreenRenderFallback {...fallback} routeName={props.route.name} />
       )}
     >
-      {props.children}
+      {props.route.name === "Home" || props.route.name === "Settings" ? (
+        props.children
+      ) : (
+        <StackScreenTransition>{props.children}</StackScreenTransition>
+      )}
     </RenderErrorBoundary>
   );
 }

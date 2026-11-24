@@ -1,5 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable } from "react-native";
+import Animated, { useReducedMotion } from "react-native-reanimated";
 
 import { cn } from "../../lib/cn";
 
@@ -17,6 +18,7 @@ export function RowPressable({
   readonly interactionOpacity?: number;
 }) {
   const [hovered, setHovered] = useState(false);
+  const reduceMotion = useReducedMotion();
   return (
     <Pressable
       {...props}
@@ -30,12 +32,21 @@ export function RowPressable({
         onHoverOut?.(event);
       }}
     >
-      <View
-        pointerEvents="none"
-        className={cn("absolute inset-0", interactionClassName)}
-        style={{ opacity: props.disabled || !hovered ? 0 : interactionOpacity }}
-      />
-      {children}
+      {({ pressed }) => (
+        <>
+          <Animated.View
+            pointerEvents="none"
+            className={cn("absolute inset-0", interactionClassName)}
+            style={{
+              opacity: !props.disabled && (hovered || pressed) ? interactionOpacity : 0,
+              transitionProperty: "opacity",
+              transitionDuration: reduceMotion ? 0 : pressed ? 80 : 120,
+              transitionTimingFunction: "ease-out",
+            }}
+          />
+          {children}
+        </>
+      )}
     </Pressable>
   );
 }
