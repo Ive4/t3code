@@ -6,6 +6,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MOBILE_MOTION } from "../../../lib/designTokens";
 
@@ -13,6 +14,9 @@ export function WorkspaceTabTransition({ children, tab }: PropsWithChildren<{ ta
   const previousTab = useRef(tab);
   const reduceMotion = useReducedMotion();
   const opacity = useSharedValue(1);
+  const { top } = useSafeAreaInsets();
+  // These lists have no app bar to account for the status bar.
+  const paddingTop = tab === "pullRequests" || tab === "issues" ? top : 0;
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- animates the native view when the selected tab changes
   useLayoutEffect(() => {
@@ -27,7 +31,7 @@ export function WorkspaceTabTransition({ children, tab }: PropsWithChildren<{ ta
 
   const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   return (
-    <Animated.View className="flex-1" style={style}>
+    <Animated.View className="flex-1" style={[{ paddingTop }, style]}>
       {children}
     </Animated.View>
   );
