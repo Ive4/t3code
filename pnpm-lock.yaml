@@ -567,6 +567,9 @@ importers:
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
+      hermes-compiler:
+        specifier: 250829098.0.17
+        version: 250829098.0.17
       metro:
         specifier: 0.87.1
         version: 0.87.1(bufferutil@4.1.0)(supports-color@8.1.1)(utf-8-validate@6.0.6)

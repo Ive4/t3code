@@ -38,4 +38,5 @@ node apps/harmonyos/scripts/bundle-shared.cjs --framework <rnoh-js-package> --na
 
 If the RNOH checkout does not have its JavaScript dependencies installed, pass the
 directory containing its pinned runtime packages with `--runtime-node-modules`.
-The command writes the bundle and assets into the candidate's entry module.
+The command compiles the shared bundle to `bundle.harmony.hbc` with the Hermes compiler
+matched to RNOH 0.88.0 and writes it with its assets into the candidate's entry module.

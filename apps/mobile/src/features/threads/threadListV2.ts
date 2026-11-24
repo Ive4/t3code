@@ -85,16 +85,29 @@ export type ThreadListV2SwipeAction = "archive" | "settle" | "unsettle" | "snooz
  * it would keep the times from the row's first render.
  */
 export function resolveThreadListV2SnoozePresets(
-  input: {
-    readonly secondary: "snooze" | null;
-    readonly now: string;
-    readonly presets: ReadonlyArray<SnoozePresetSetting> | undefined;
-  },
+  now: string,
+  presets: ReadonlyArray<SnoozePresetSetting> | undefined,
   resolve: MessageResolver = m,
 ): ReadonlyArray<SnoozePreset> {
-  return input.secondary === "snooze"
-    ? resolveSnoozePresets(new Date(input.now), presetOptions(input.presets), resolve)
-    : [];
+  return resolveSnoozePresets(new Date(now), presetOptions(presets), resolve);
+}
+
+export function createThreadListV2SnoozePresetResolver(resolve: MessageResolver = m) {
+  const defaultSettings: ReadonlyArray<SnoozePresetSetting> = [];
+  // Each list keeps only the latest minute per settings array, which the environment can replace.
+  const cache = new WeakMap<
+    ReadonlyArray<SnoozePresetSetting>,
+    { readonly minute: string; readonly presets: ReadonlyArray<SnoozePreset> }
+  >();
+  return (minute: string, settings: ReadonlyArray<SnoozePresetSetting> | undefined) => {
+    const key = settings ?? defaultSettings;
+    const cached = cache.get(key);
+    if (cached?.minute === minute) return cached.presets;
+
+    const presets = resolveThreadListV2SnoozePresets(minute, settings, resolve);
+    cache.set(key, { minute, presets });
+    return presets;
+  };
 }
 
 function presetOptions(presets: ReadonlyArray<SnoozePresetSetting> | undefined) {

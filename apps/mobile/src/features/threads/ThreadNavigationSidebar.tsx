@@ -276,6 +276,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     items: threadListV2Items,
     contentOnlyThreadKeys,
     olderSettledShelf,
+    resolveSnoozePresets,
   } = useThreadListV2({
     threads: launchingThreads,
     pendingTasks,
@@ -364,6 +365,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     projectTitleByProjectKey,
     savedConnectionsById,
     listEnvironments,
+    resolveSnoozePresets,
     threadSearchMatchByKey,
     workingShelfEnabled,
   };
@@ -468,6 +470,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
             onSettleThread={settleThread}
             snoozeSupported={snoozeEnvironmentIds.has(thread.environmentId)}
             snoozePresets={snoozePresetsByEnvironmentId.get(thread.environmentId)}
+            resolveSnoozePresets={resolveSnoozePresets}
             pinningSupported={pinningEnvironmentIds.has(thread.environmentId)}
             autoSettleOptOutSupported={autoSettleOptOutEnvironmentIds.has(thread.environmentId)}
             reorderSupported={

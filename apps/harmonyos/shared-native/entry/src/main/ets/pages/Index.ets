@@ -18,7 +18,7 @@ struct Index {
           },
           jsBundleProvider: new ResourceJSBundleProvider(
             this.context.uiAbilityContext.resourceManager,
-            'bundle.harmony.js',
+            'bundle.harmony.hbc',
           ),
         });
       }

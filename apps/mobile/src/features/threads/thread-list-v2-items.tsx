@@ -82,6 +82,7 @@ import {
   resolveThreadListV2SnoozeGateExpiryMs,
   resolveThreadListV2SnoozeMenuSelection,
   resolveThreadListV2SnoozePresets,
+  type createThreadListV2SnoozePresetResolver,
   threadHasUnseenCompletion,
   resolveThreadListV2RowStatus,
   resolveThreadListV2Status,
@@ -782,6 +783,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly settlementSupported: boolean;
   readonly snoozeSupported: boolean;
   readonly snoozePresets: ReadonlyArray<SnoozePresetSetting> | undefined;
+  readonly resolveSnoozePresets: ReturnType<typeof createThreadListV2SnoozePresetResolver>;
   readonly pinningSupported: boolean;
   readonly autoSettleOptOutSupported: boolean;
   readonly titleRegenerationSupported: boolean;
@@ -980,14 +982,12 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     snoozable: canSnooze(thread, { now: snoozeGateNow }),
     snoozed: snoozedRow,
   });
-  const snoozePresets = resolveThreadListV2SnoozePresets(
-    {
-      secondary: swipeActions.secondary,
-      now: props.snoozePresetMinute || snoozeGateNow,
-      presets: props.snoozePresets,
-    },
-    m,
-  );
+  const snoozePresets =
+    swipeActions.secondary !== "snooze"
+      ? []
+      : props.snoozePresetMinute
+        ? props.resolveSnoozePresets(props.snoozePresetMinute, props.snoozePresets)
+        : resolveThreadListV2SnoozePresets(snoozeGateNow, props.snoozePresets, m);
   const snoozePresetActions = useMemo<MenuAction[]>(
     () => [
       ...snoozePresets.map((preset) => ({

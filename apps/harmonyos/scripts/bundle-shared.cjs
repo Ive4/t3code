@@ -1,8 +1,9 @@
+const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { existsSync, readFileSync, realpathSync, statSync } = require("node:fs");
-const { copyFile, mkdir, mkdtemp, rmdir, unlink } = require("node:fs/promises");
+const { copyFile, mkdir, mkdtemp, rm } = require("node:fs/promises");
 const { createRequire, registerHooks } = require("node:module");
-const { tmpdir } = require("node:os");
+const { platform, tmpdir } = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { parseArgs } = require("node:util");
@@ -14,6 +15,11 @@ const sharedRoot = path.join(harmonyRoot, "src/shared");
 const mobileRequire = createRequire(path.join(mobileRoot, "package.json"));
 const frameworkPackage = "@react-native-oh/react-native-harmony";
 const frameworkVersion = "0.88.0";
+const hermesCompilerBins = {
+  darwin: "osx-bin/hermesc",
+  linux: "linux64-bin/hermesc",
+  win32: "win64-bin/hermesc.exe",
+};
 const runtimePackages = [
   "@react-native/assets-registry",
   "@react-native/js-polyfills",
@@ -43,6 +49,14 @@ const ports = new Map(
 );
 
 const nativeFallbacks = new Set(["T3ComposerEditor", "T3KeyboardCommands"]);
+
+// The pinned RNOH Hermes build disables Intl, so these polyfills always install.
+const requiredIntlPolyfills = new Set([
+  "@formatjs/intl-datetimeformat/polyfill",
+  "@formatjs/intl-displaynames/polyfill",
+  "@formatjs/intl-numberformat/polyfill",
+  "@formatjs/intl-pluralrules/polyfill",
+]);
 
 const usage =
   "Usage: node apps/harmonyos/scripts/bundle-shared.cjs " +
@@ -132,6 +146,7 @@ function configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot) 
     const resolve = context.resolveRequest;
     const origin = context.originModulePath.replaceAll("\\", "/");
     if (platform === "harmony") {
+      if (requiredIntlPolyfills.has(request)) request += "-force";
       const port = ports.get(request);
       if (port) return { type: "sourceFile", filePath: port };
       if (
@@ -239,6 +254,11 @@ async function bundle() {
   if (framework.name !== frameworkPackage || framework.version !== frameworkVersion) {
     throw new Error("Shared Harmony bundles require " + frameworkPackage + "@" + frameworkVersion);
   }
+  const hostPlatform = platform();
+  const compilerBin = hermesCompilerBins[hostPlatform];
+  if (!compilerBin) throw new Error("No Hermes compiler for " + hostPlatform);
+  const compilerRoot = path.dirname(require.resolve("hermes-compiler/package.json"));
+  const compiler = path.join(compilerRoot, "hermesc", compilerBin);
   if (!existsSync(path.join(frameworkRoot, "Libraries/Core/InitializeCore.js"))) {
     throw new Error(
       "RNOH source is missing upstream React Native files in " +
@@ -288,30 +308,33 @@ async function bundle() {
   configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot);
 
   const temporary = await mkdtemp(path.join(tmpdir(), "t3-harmony-uniwind-"));
-  const dtsFile = path.join(temporary, "uniwind.d.ts");
   try {
     const styledConfig = withUniwindConfig(config, {
       cssEntryFile: "../mobile/global.css",
       extraThemes: mobileRequire("./generated-uniwind-theme-names.json"),
       polyfills: { rem: 14 },
-      dtsFile,
+      dtsFile: path.join(temporary, "uniwind.d.ts"),
     });
-    await mkdir(outDir, { recursive: true });
+    const bundlePath = path.join(temporary, "bundle.harmony.js");
+    const bytecodePath = path.join(temporary, "bundle.harmony.hbc");
     const result = await runBuild(styledConfig, {
       entry: path.join(sharedRoot, "index.js"),
-      out: path.join(outDir, "bundle.harmony.js"),
+      out: bundlePath,
       platform: "harmony",
       dev: false,
       minify: false,
       assets: true,
     });
+    execFileSync(compiler, ["-emit-binary", "-O", "-out", bytecodePath, bundlePath], {
+      stdio: "inherit",
+    });
+    await mkdir(outDir, { recursive: true });
     const count = await writeAssets(result.assets ?? [], path.join(outDir, "assets"));
+    await copyFile(bytecodePath, path.join(outDir, "bundle.harmony.hbc"));
+    await rm(path.join(outDir, "bundle.harmony.js"), { force: true });
     console.log("Copied " + count + " mobile assets to " + outDir);
   } finally {
-    await unlink(dtsFile).catch((error) => {
-      if (error.code !== "ENOENT") throw error;
-    });
-    await rmdir(temporary);
+    await rm(temporary, { recursive: true, force: true });
   }
 }
 

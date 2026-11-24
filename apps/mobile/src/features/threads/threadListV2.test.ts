@@ -35,6 +35,7 @@ import { threadJumpTarget } from "../keyboard/threadKeyboardShortcuts";
 import {
   buildThreadListV2Items,
   buildThreadListV2ListItems,
+  createThreadListV2SnoozePresetResolver,
   getThreadListV2OrderedSection,
   layoutThreadListV2RowMenuActions,
   resolveThreadListV2SnoozeMenuSelection,
@@ -90,17 +91,40 @@ describe("resolveThreadListV2SnoozePresets", () => {
     vi.useFakeTimers({ now: new Date(2026, 4, 8, 10) });
     const laterMinute = new Date(2026, 4, 8, 19, 15).toISOString();
 
-    const presets = resolveThreadListV2SnoozePresets({
-      secondary: "snooze",
-      now: laterMinute,
-      presets: undefined,
-    });
+    const presets = resolveThreadListV2SnoozePresets(laterMinute, undefined);
 
     expect(presets.find((preset) => preset.id === "after:60")?.snoozedUntil).toBe(
       new Date(2026, 4, 8, 20, 15).toISOString(),
     );
     // The evening preset is gone by 19:15; a reading from 10:00 would still offer it.
     expect(presets.map((preset) => preset.id)).not.toContain("at:today:18:00");
+  });
+});
+
+describe("createThreadListV2SnoozePresetResolver", () => {
+  it("shares presets for rows with the same list minute and settings", () => {
+    const resolve = createThreadListV2SnoozePresetResolver();
+    const minute = new Date(2026, 4, 8, 17, 59).toISOString();
+    const nextMinute = new Date(2026, 4, 8, 18).toISOString();
+    const settingsA = [{ kind: "after", minutes: 30 }] as const;
+    const settingsB = [{ kind: "after", minutes: 120 }] as const;
+
+    const defaults = resolve(minute, undefined);
+    const presetsA = resolve(minute, settingsA);
+    const presetsB = resolve(minute, settingsB);
+    expect(presetsA.map((preset) => preset.id)).toEqual(["after:30"]);
+    expect(presetsB.map((preset) => preset.id)).toEqual(["after:120"]);
+    expect(resolve(minute, settingsA)).toBe(presetsA);
+    expect(resolve(minute, settingsB)).toBe(presetsB);
+    expect(resolve(minute, undefined)).toBe(defaults);
+
+    expect(defaults.map((preset) => preset.id)).toContain("at:today:18:00");
+    expect(resolve(nextMinute, undefined).map((preset) => preset.id)).not.toContain(
+      "at:today:18:00",
+    );
+    expect(resolve(nextMinute, settingsA)[0]?.snoozedUntil).toBe(
+      new Date(2026, 4, 8, 18, 30).toISOString(),
+    );
   });
 });
 

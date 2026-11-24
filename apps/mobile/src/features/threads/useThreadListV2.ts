@@ -1,5 +1,6 @@
 import type { OlderSettledScope } from "@t3tools/client-runtime/state/threads";
 import type { EnvironmentId } from "@t3tools/contracts";
+import { useMessages } from "gt-react-native";
 import { useMemo, useSyncExternalStore } from "react";
 
 import { keepMarked } from "../../i18n/messages";
@@ -9,6 +10,7 @@ import type { PendingNewTask } from "../../state/use-pending-new-tasks";
 import {
   buildThreadListV2Items,
   buildThreadListV2ListItems,
+  createThreadListV2SnoozePresetResolver,
   getThreadListV2OrderedSection,
   threadListInboxReturns,
   threadListV2LayoutTime,
@@ -68,6 +70,11 @@ export function useThreadListV2(input: {
   readonly selectedThreadKey: string | null;
 }) {
   const { threads, workingShelfEnabled } = input;
+  const messages = useMessages();
+  const resolveSnoozePresets = useMemo(
+    () => createThreadListV2SnoozePresetResolver(messages),
+    [messages],
+  );
   const layoutTime = useMemo(
     () => threadListV2LayoutTime({ threads, now: input.now, searchQuery: input.searchQuery }),
     [threads, input.now, input.searchQuery],
@@ -244,7 +251,7 @@ export function useThreadListV2(input: {
       input.shelfPreferencesLoaded,
     ],
   );
-  return { layout, items, contentOnlyThreadKeys, olderSettledShelf };
+  return { layout, items, contentOnlyThreadKeys, olderSettledShelf, resolveSnoozePresets };
 }
 
 /** The list's scope per environment: its projects there, or every project. */
