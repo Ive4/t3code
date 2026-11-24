@@ -1,0 +1,258 @@
+diff --git a/worklets/src/main/cpp/AnimationFrameManager.cpp b/worklets/src/main/cpp/AnimationFrameManager.cpp
+index fda295f..1bc7f9a 100644
+--- a/worklets/src/main/cpp/AnimationFrameManager.cpp
++++ b/worklets/src/main/cpp/AnimationFrameManager.cpp
+@@ -4,7 +4,7 @@
+ 
+ #include "AnimationFrameManager.h"
+ 
+-#include "Common/cpp/worklets/Tools/FeatureFlags.h"
++#include <worklets/Tools/FeatureFlags.h>
+ 
+ #include <glog/logging.h>
+ 
+diff --git a/worklets/src/main/cpp/AsyncQueueImplOHOS.cpp b/worklets/src/main/cpp/AsyncQueueImplOHOS.cpp
+new file mode 100644
+index 0000000..62c95c6
+--- /dev/null
++++ b/worklets/src/main/cpp/AsyncQueueImplOHOS.cpp
+@@ -0,0 +1,67 @@
++#include <worklets/RunLoop/AsyncQueueImpl.h>
++
++#include <pthread.h>
++
++#include <thread>
++#include <utility>
++
++namespace worklets {
++
++void AsyncQueueImpl::runLoop(const std::shared_ptr<AsyncQueueState> &state) {
++  while (state->running) {
++    std::unique_lock<std::mutex> lock(state->mutex);
++    state->cv.wait(lock, [state] { return !state->queue.empty() || !state->running; });
++    if (!state->running) {
++      return;
++    }
++    if (state->queue.empty()) {
++      continue;
++    }
++    auto job = std::move(state->queue.front());
++    state->queue.pop();
++    lock.unlock();
++    job();
++  }
++}
++
++AsyncQueueImpl::AsyncQueueImpl(const std::string &name) : state_(std::make_shared<AsyncQueueState>()) {
++  auto thread = std::thread([name, state = state_] {
++    pthread_setname_np(pthread_self(), name.substr(0, 15).c_str());
++    AsyncQueueImpl::runLoop(state);
++  });
++  thread.detach();
++}
++
++AsyncQueueImpl::~AsyncQueueImpl() {
++  std::queue<std::function<void()>> pendingJobs;
++  {
++    std::unique_lock<std::mutex> lock(state_->mutex);
++    state_->running = false;
++    std::swap(pendingJobs, state_->queue);
++  }
++  state_->cv.notify_all();
++}
++
++void AsyncQueueImpl::push(std::function<void()> &&job) {
++  {
++    std::unique_lock<std::mutex> lock(state_->mutex);
++    state_->queue.emplace(std::move(job));
++  }
++  state_->cv.notify_one();
++}
++
++void AsyncQueueImpl::abortPending(AbortToken /* abortToken */) {
++  std::queue<std::function<void()>> pendingJobs;
++  {
++    std::unique_lock<std::mutex> lock(state_->mutex);
++    std::swap(pendingJobs, state_->queue);
++  }
++}
++
++AsyncQueueUI::AsyncQueueUI(const std::shared_ptr<UIScheduler> &uiScheduler) : uiScheduler_(uiScheduler) {}
++
++void AsyncQueueUI::push(std::function<void()> &&job) {
++  uiScheduler_->scheduleOnUI(std::move(job));
++}
++
++} // namespace worklets
+diff --git a/worklets/src/main/cpp/CMakeLists.txt b/worklets/src/main/cpp/CMakeLists.txt
+index 5f98dd3..7ed097b 100644
+--- a/worklets/src/main/cpp/CMakeLists.txt
++++ b/worklets/src/main/cpp/CMakeLists.txt
+@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.4.1)
+ 
+ get_directory_property(_WORKLETS_INHERITED_DEFS COMPILE_DEFINITIONS)
+ if(NOT _WORKLETS_INHERITED_DEFS MATCHES "WORKLETS_FEATURE_FLAGS")
+-  add_compile_definitions(WORKLETS_FEATURE_FLAGS="[RUNTIME_TEST_FLAG:false][FETCH_PREVIEW_ENABLED:false][IOS_DYNAMIC_FRAMERATE_ENABLED:true][ENABLE_CROSS_RUNTIME_STACK_TRACES:true]")
++  add_compile_definitions(WORKLETS_FEATURE_FLAGS="[RUNTIME_TEST_FLAG:false][IOS_DYNAMIC_FRAMERATE_ENABLED:true][ENABLE_CROSS_RUNTIME_STACK_TRACES:true]")
+ endif()
+-add_compile_definitions(JS_RUNTIME_HERMES=1)
++add_compile_definitions(JS_RUNTIME_HERMES=1 WORKLETS_VERSION=0.13.1 _LIBCPP_ENABLE_EXPERIMENTAL)
+ 
+ set(CMAKE_CXX_STANDARD 20)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ 
+-set(WORKLET_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Common")
++set(WORKLET_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/WorkletCore")
+ 
+ file(GLOB rnoh_worklet_SRC CONFIGURE_DEPENDS *.cpp)
+ 
+@@ -28,40 +28,9 @@ target_include_directories(
+   "${WORKLET_SRC_DIR}/cpp"
+   "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime"
+ )
+-target_sources(rnoh_worklets
+-  PUBLIC
+-  "${WORKLET_SRC_DIR}/cpp/worklets/AnimationFrameQueue/AnimationFrameBatchinator.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Compat/StableApi.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/NativeModules/JSIWorkletsModuleProxy.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/NativeModules/WorkletsModuleProxy.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Registries/EventHandlerRegistry.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Registries/WorkletRuntimeRegistry.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/RunLoop/AsyncQueueImpl.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/RunLoop/EventLoop.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/SharedItems/MemoryManager.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/SharedItems/Serializable.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/SharedItems/SerializableFactory.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/SharedItems/SerializableRemoteFunction.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/SharedItems/Shareable.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/SharedItems/Synchronizable.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/SharedItems/SynchronizableAccess.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/FeatureFlags.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/JSISerializer.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/JSLogger.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/JSScheduler.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/UIScheduler.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/VersionUtils.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/WorkletEventHandler.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/WorkletsJSIUtils.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/Tools/WorkletsVersion.cpp"
+-   "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime/HermesProfiling.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime/RNRuntimeWorkletDecorator.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime/RuntimeManager.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime/UIRuntimeDecorator.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime/WorkletHermesRuntime.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime/WorkletRuntime.cpp"
+-  "${WORKLET_SRC_DIR}/cpp/worklets/WorkletRuntime/WorkletRuntimeDecorator.cpp"
+-  )
++file(GLOB_RECURSE WORKLETS_CORE_SOURCES CONFIGURE_DEPENDS "${WORKLET_SRC_DIR}/cpp/worklets/*.cpp")
++list(REMOVE_ITEM WORKLETS_CORE_SOURCES "${WORKLET_SRC_DIR}/cpp/worklets/RunLoop/AsyncQueueImpl.cpp")
++target_sources(rnoh_worklets PRIVATE ${WORKLETS_CORE_SOURCES})
+ 
+ target_include_directories(rnoh_worklets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(rnoh_worklets PUBLIC rnoh)
+diff --git a/worklets/src/main/cpp/WorkletsModule.cpp b/worklets/src/main/cpp/WorkletsModule.cpp
+index 314e7fc..5c62d3d 100644
+--- a/worklets/src/main/cpp/WorkletsModule.cpp
++++ b/worklets/src/main/cpp/WorkletsModule.cpp
+@@ -3,8 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "AnimationFrameManager.h"
+-#include "Common/cpp/worklets/WorkletRuntime/BundleModeConfig.h"
+-#include "Common/cpp/worklets/WorkletRuntime/RuntimeBindings.h"
++#include <worklets/WorkletRuntime/BundleModeConfig.h>
++#include <worklets/WorkletRuntime/RuntimeBindings.h>
+ #include "RNOH/ArkTSTurboModule.h"
+ #include "RNOH/RNInstance.h"
+ #include "WorkletsUIScheduler.h"
+@@ -16,6 +16,16 @@
+ 
+ using namespace facebook;
+ namespace worklets {
++namespace {
++RuntimeBindings::NativeLoggingHook extractNativeLoggingHookFromRNRuntime(jsi::Runtime &runtime) {
++    auto hook = runtime.global().getProperty(runtime, "nativeLoggingHook");
++    if (!hook.isObject() || !hook.asObject(runtime).isFunction(runtime)) {
++        throw std::runtime_error("[Worklets] nativeLoggingHook is missing.");
++    }
++    return hook.asObject(runtime).asFunction(runtime).getHostFunction(runtime);
++}
++} // namespace
++
+ jsi::Value installTurboModule(facebook::jsi::Runtime &rt, react::TurboModule &turboModule,
+                               const facebook::jsi::Value *args, size_t count) {
+     auto self = static_cast<WorkletsModule *>(&turboModule);
+@@ -100,7 +110,7 @@ void WorkletsModule::installTurboModule(facebook::jsi::Runtime &runtime, bool bu
+                 int res = OH_ResourceManager_ReadRawFile(rawFile, jsBigString.data(), len);
+                 if (res == len) {
+                     script = std::make_shared<ScriptBuffer>(
+-                        std::make_unique<JSBigStdString>(std::move(jsBigString), true));
++                        std::make_shared<JSBigStdString>(std::move(jsBigString), true));
+                     sourceURL = instance->getBundlePath();
+                 } else {
+                     bundleModeEnabled = false;
+@@ -118,20 +128,22 @@ void WorkletsModule::installTurboModule(facebook::jsi::Runtime &runtime, bool bu
+     }
+ 
+     rnRuntimeStatus_ = std::make_shared<RNRuntimeStatus>();
+-    workletsModuleProxy_ = std::make_shared<WorkletsModuleProxy>(
+-        runtime, jsInvoker_, std::make_shared<rnoh::WorkletsUIScheduler>(m_ctx.taskExecutor),
+-        std::move(isJavaScriptQueue),
++    auto proxy = std::make_shared<WorkletsModuleProxy>(
++        std::make_shared<JSScheduler>(runtime, jsInvoker_, std::move(isJavaScriptQueue)),
++        std::make_shared<rnoh::WorkletsUIScheduler>(m_ctx.taskExecutor),
+         std::make_shared<RuntimeBindings>(RuntimeBindings{
+             .requestAnimationFrame = std::move(forwardedRequestAnimationFrame),
+             .nativeLoggingHook = bundleModeEnabled ? extractNativeLoggingHookFromRNRuntime(runtime)
+                                                    : RuntimeBindings::NativeLoggingHook{},
++            .networkingBackend = nullptr,
+         }),
+-        BundleModeConfig{
+-            .enabled = bundleModeEnabled,
+-            .script = std::move(script),
+-            .sourceURL = std::move(sourceURL),
+-        },
+         rnRuntimeStatus_);
++    proxy->attachToRNRuntime(runtime, BundleModeConfig{
++        .enabled = bundleModeEnabled,
++        .script = std::move(script),
++        .sourceURL = std::move(sourceURL),
++    });
++    workletsModuleProxy_ = std::move(proxy);
+ }
+ 
+ void WorkletsModule::start() {
+diff --git a/worklets/src/main/cpp/WorkletsUIScheduler.cpp b/worklets/src/main/cpp/WorkletsUIScheduler.cpp
+index 798d348..41b7a19 100644
+--- a/worklets/src/main/cpp/WorkletsUIScheduler.cpp
++++ b/worklets/src/main/cpp/WorkletsUIScheduler.cpp
+@@ -7,12 +7,15 @@
+ namespace rnoh {
+ WorkletsUIScheduler::WorkletsUIScheduler(std::shared_ptr<TaskExecutor> taskExecutor)
+     : m_taskExecutor(taskExecutor) {}
++bool WorkletsUIScheduler::queryIsOnUIThread() const {
++    return m_taskExecutor->isOnTaskThread(TaskThread::MAIN);
++}
+ void WorkletsUIScheduler::scheduleOnUI(std::function<void()> job) {
+-    if (m_taskExecutor->isOnTaskThread(TaskThread::MAIN)) {
++    if (isOnUIThread()) {
+         job();
+         return;
+     }
+-    UIScheduler::scheduleOnUI(job);
++    UIScheduler::scheduleOnUI(std::move(job));
+     if (!scheduledOnUI_.exchange(true)) {
+         m_taskExecutor->runTask(TaskThread::MAIN, [weakSelf = weak_from_this()]() {
+             if (auto self = weakSelf.lock()) {
+diff --git a/worklets/src/main/cpp/WorkletsUIScheduler.h b/worklets/src/main/cpp/WorkletsUIScheduler.h
+index bc9eb86..cbaceea 100644
+--- a/worklets/src/main/cpp/WorkletsUIScheduler.h
++++ b/worklets/src/main/cpp/WorkletsUIScheduler.h
+@@ -11,6 +11,7 @@
+ namespace rnoh {
+ class WorkletsUIScheduler : public std::enable_shared_from_this<WorkletsUIScheduler>, public worklets::UIScheduler {
+ private:
++    bool queryIsOnUIThread() const override;
+     std::shared_ptr<TaskExecutor> m_taskExecutor;
+ 
+ public:

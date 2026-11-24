@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "bootstrap:shared-vendor": "node scripts/bootstrap-shared-vendor.cjs",
     "bundle": "node scripts/bundle.cjs",
     "bundle:shared": "node scripts/bundle-shared.cjs",
     "typecheck": "effect-tsgo tsrs --noEmit"

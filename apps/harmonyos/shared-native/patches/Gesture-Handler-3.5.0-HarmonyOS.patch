@@ -1,0 +1,1160 @@
+diff --git a/gesture/src/main/cpp/CMakeLists.txt b/gesture/src/main/cpp/CMakeLists.txt
+index ef48d28..8f548bd 100644
+--- a/gesture/src/main/cpp/CMakeLists.txt
++++ b/gesture/src/main/cpp/CMakeLists.txt
+@@ -158,6 +158,11 @@ add_library(rnoh_gesture_handler SHARED ${rnoh_gesture_handler_SRC} ${rnoh_gestu
+ target_include_directories(rnoh_gesture_handler PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}  ${rnoh_gesture_handle_generated_dir})
+ target_link_libraries(rnoh_gesture_handler PUBLIC rnoh)
+ 
++if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../worklets/src/main/cpp/WorkletCore/cpp/worklets/Compat/StableApi.h")
++    target_link_libraries(rnoh_gesture_handler PRIVATE rnoh_worklets)
++    target_compile_definitions(rnoh_gesture_handler PRIVATE RNGH_WITH_WORKLETS=1)
++endif()
++
+ if(USE_COMMON_INTERFACE_FROM_RNSVG)
+     target_include_directories(rnoh_gesture_handler PUBLIC ${rnsvg_cpp_include_dir})
+     target_link_libraries(rnoh_gesture_handler PUBLIC rnoh_svg)
+diff --git a/gesture/src/main/cpp/RnohReactNativeHarmonyGestureHandlerPackage.cpp b/gesture/src/main/cpp/RnohReactNativeHarmonyGestureHandlerPackage.cpp
+index 653f35c..8b4929d 100644
+--- a/gesture/src/main/cpp/RnohReactNativeHarmonyGestureHandlerPackage.cpp
++++ b/gesture/src/main/cpp/RnohReactNativeHarmonyGestureHandlerPackage.cpp
+@@ -26,6 +26,7 @@
+ #include "RNOH/RNInstanceCAPI.h"
+ #include "componentInstances/RNGestureHandlerButtonComponentInstance.h"
+ #include "componentInstances/RNGestureHandlerRootViewComponentInstance.h"
++#include "componentInstances/RNGestureHandlerDetectorComponentInstance.h"
+ #include <glog/logging.h>
+ #include <cxxreact/SystraceSection.h>
+ #include "RNOH/ArkTSTurboModule.h"
+@@ -53,6 +54,23 @@ class RNGHEventEmitRequestHandler : public EventEmitRequestHandler {
+         if (eventEmitter == nullptr) {
+             return;
+         }
++        if (ctx.shadowViewRegistry->getComponentName(ctx.tag) == "RNGestureHandlerDetector") {
++            for (const auto* suffix : gestureDetectorEventSuffixes) {
++                if (ctx.eventName == "on" + std::string(suffix)) {
++                    auto payload = ArkJS(ctx.env).getDynamic(ctx.payload);
++                    // Only continuous updates coalesce; state and touch transitions need ordered delivery.
++                    if (ctx.eventName == "onGestureHandlerEvent" ||
++                        ctx.eventName == "onGestureHandlerReanimatedEvent" ||
++                        ctx.eventName == "onGestureHandlerAnimatedEvent") {
++                        eventEmitter->dispatchEvent(suffix, std::move(payload), react::RawEvent::Category::Continuous);
++                    } else {
++                        eventEmitter->dispatchEvent(suffix, std::move(payload));
++                    }
++                    return;
++                }
++            }
++            return;
++        }
+         if (ctx.eventName == "onGestureHandlerEvent") {
+             eventEmitter->dispatchUniqueEvent(ctx.eventName, ArkJS(ctx.env).getDynamic(ctx.payload));
+         } else if (ctx.eventName == "onGestureHandlerStateChange") {
+@@ -68,6 +86,8 @@ public:
+     ComponentInstance::Shared create(ComponentInstance::Context ctx) override {
+         if (ctx.componentName == "RNGestureHandlerButton") {
+             return std::make_shared<RNGestureHandlerButtonComponentInstance>(ctx);
++        } else if (ctx.componentName == "RNGestureHandlerDetector") {
++            return std::make_shared<RNGestureHandlerDetectorComponentInstance>(ctx);
+         } else if (ctx.componentName == "RNGestureHandlerRootView") {
+             return std::make_shared<RNGestureHandlerRootViewComponentInstance>(ctx);
+         }
+@@ -83,12 +103,14 @@ std::vector<react::ComponentDescriptorProvider> RnohReactNativeHarmonyGestureHan
+     return {
+         react::concreteComponentDescriptorProvider<react::RNGestureHandlerRootViewComponentDescriptor>(),
+         react::concreteComponentDescriptorProvider<react::RNGestureHandlerButtonComponentDescriptor>(),
++        react::concreteComponentDescriptorProvider<react::RNGestureHandlerDetectorComponentDescriptor>(),
+     };
+ }
+ 
+ ComponentJSIBinderByString RnohReactNativeHarmonyGestureHandlerPackage::createComponentJSIBinderByName() {
+     return {
+         {"RNGestureHandlerButton", std::make_shared<RNGestureHandlerButtonJSIBinder>()},
++        {"RNGestureHandlerDetector", std::make_shared<RNGestureHandlerDetectorJSIBinder>()},
+         {"RNGestureHandlerRootView", std::make_shared<RNGestureHandlerRootViewJSIBinder>()},
+     };
+ };
+diff --git a/gesture/src/main/cpp/componentInstances/RNGestureHandlerDetectorComponentInstance.cpp b/gesture/src/main/cpp/componentInstances/RNGestureHandlerDetectorComponentInstance.cpp
+new file mode 100644
+index 0000000..a29f681
+--- /dev/null
++++ b/gesture/src/main/cpp/componentInstances/RNGestureHandlerDetectorComponentInstance.cpp
+@@ -0,0 +1,94 @@
++#include "RNGestureHandlerDetectorComponentInstance.h"
++
++#include <react/renderer/core/propsConversions.h>
++#include "RNOH/RNInstance.h"
++
++namespace facebook::react {
++
++const char RNGestureHandlerDetectorComponentName[] = "RNGestureHandlerDetector";
++
++void fromRawValue(
++    const PropsParserContext& context, const RawValue& value, RNGestureHandlerVirtualChild& result) {
++    auto fields = static_cast<std::unordered_map<std::string, RawValue>>(value);
++    if (auto field = fields.find("viewTag"); field != fields.end()) {
++        fromRawValue(context, field->second, result.viewTag);
++    }
++    if (auto field = fields.find("handlerTags"); field != fields.end()) {
++        fromRawValue(context, field->second, result.handlerTags);
++    }
++}
++
++RNGestureHandlerDetectorProps::RNGestureHandlerDetectorProps(
++    const PropsParserContext& context,
++    const RNGestureHandlerDetectorProps& source,
++    const RawProps& rawProps)
++    : ViewProps(context, source, rawProps),
++      moduleId(convertRawProp(context, rawProps, "moduleId", source.moduleId, -1)),
++      handlerTags(convertRawProp(context, rawProps, "handlerTags", source.handlerTags, {})),
++      virtualChildren(convertRawProp(context, rawProps, "virtualChildren", source.virtualChildren, {})) {}
++
++} // namespace facebook::react
++
++namespace rnoh {
++
++facebook::jsi::Object RNGestureHandlerDetectorJSIBinder::createNativeProps(facebook::jsi::Runtime& rt) {
++    auto props = ViewComponentJSIBinder::createNativeProps(rt);
++    props.setProperty(rt, "moduleId", "number");
++    props.setProperty(rt, "handlerTags", "Array");
++    props.setProperty(rt, "virtualChildren", "Array");
++    return props;
++}
++
++facebook::jsi::Object RNGestureHandlerDetectorJSIBinder::createDirectEventTypes(facebook::jsi::Runtime& rt) {
++    auto events = ViewComponentJSIBinder::createDirectEventTypes(rt);
++    for (const auto* suffix : gestureDetectorEventSuffixes) {
++        events.setProperty(rt, ("top" + std::string(suffix)).c_str(), createDirectEvent(rt, "on" + std::string(suffix)));
++    }
++    return events;
++}
++
++RNGestureHandlerDetectorComponentInstance::~RNGestureHandlerDetectorComponentInstance() {
++    if (!m_attachment.isNull()) {
++        if (auto instance = m_deps->rnInstance.lock()) {
++            instance->postMessageToArkTS("RNGH::DETECTOR_REMOVED", getTag());
++        }
++    }
++}
++
++void RNGestureHandlerDetectorComponentInstance::onFinalizeUpdates() {
++    ViewComponentInstance::onFinalizeUpdates();
++    auto props = std::dynamic_pointer_cast<const facebook::react::RNGestureHandlerDetectorProps>(getProps());
++    if (!props) {
++        return;
++    }
++
++    auto tagsToDynamic = [](const auto& tags) {
++        auto result = folly::dynamic::array();
++        for (auto tag : tags) {
++            result.push_back(tag);
++        }
++        return result;
++    };
++
++    auto virtualChildren = folly::dynamic::array();
++    for (const auto& child : props->virtualChildren) {
++        virtualChildren.push_back(folly::dynamic::object
++            ("viewTag", child.viewTag)
++            ("handlerTags", tagsToDynamic(child.handlerTags)));
++    }
++    const auto& children = getChildren();
++    folly::dynamic attachment = folly::dynamic::object
++        ("tag", getTag())
++        ("moduleId", props->moduleId)
++        ("handlerTags", tagsToDynamic(props->handlerTags))
++        ("childTag", children.size() == 1 ? children.front()->getTag() : 0)
++        ("virtualChildren", std::move(virtualChildren));
++    if (attachment != m_attachment) {
++        if (auto instance = m_deps->rnInstance.lock()) {
++            instance->postMessageToArkTS("RNGH::DETECTOR_UPDATED", attachment);
++        }
++        m_attachment = std::move(attachment);
++    }
++}
++
++} // namespace rnoh
+diff --git a/gesture/src/main/cpp/componentInstances/RNGestureHandlerDetectorComponentInstance.h b/gesture/src/main/cpp/componentInstances/RNGestureHandlerDetectorComponentInstance.h
+new file mode 100644
+index 0000000..0da2f04
+--- /dev/null
++++ b/gesture/src/main/cpp/componentInstances/RNGestureHandlerDetectorComponentInstance.h
+@@ -0,0 +1,66 @@
++#pragma once
++
++#include <react/renderer/components/view/ConcreteViewShadowNode.h>
++#include <react/renderer/core/ConcreteComponentDescriptor.h>
++#include "RNOHCorePackage/ComponentBinders/ViewComponentJSIBinder.h"
++#include "RNOHCorePackage/ComponentInstances/ViewComponentInstance.h"
++
++namespace facebook::react {
++
++struct RNGestureHandlerVirtualChild {
++    Tag viewTag = 0;
++    std::vector<int> handlerTags;
++    bool operator==(const RNGestureHandlerVirtualChild&) const = default;
++};
++
++void fromRawValue(const PropsParserContext&, const RawValue&, RNGestureHandlerVirtualChild&);
++
++class RNGestureHandlerDetectorProps : public ViewProps {
++public:
++    RNGestureHandlerDetectorProps() = default;
++    RNGestureHandlerDetectorProps(
++        const PropsParserContext&, const RNGestureHandlerDetectorProps&, const RawProps&);
++
++    int moduleId = -1;
++    std::vector<int> handlerTags;
++    std::vector<RNGestureHandlerVirtualChild> virtualChildren;
++};
++
++extern const char RNGestureHandlerDetectorComponentName[];
++using RNGestureHandlerDetectorShadowNode =
++    ConcreteViewShadowNode<RNGestureHandlerDetectorComponentName, RNGestureHandlerDetectorProps>;
++using RNGestureHandlerDetectorComponentDescriptor =
++    ConcreteComponentDescriptor<RNGestureHandlerDetectorShadowNode>;
++
++} // namespace facebook::react
++
++namespace rnoh {
++
++inline constexpr const char* gestureDetectorEventSuffixes[] = {
++    "GestureHandlerEvent",
++    "GestureHandlerStateChange",
++    "GestureHandlerTouchEvent",
++    "GestureHandlerReanimatedEvent",
++    "GestureHandlerReanimatedStateChange",
++    "GestureHandlerReanimatedTouchEvent",
++    "GestureHandlerAnimatedEvent",
++};
++
++class RNGestureHandlerDetectorJSIBinder : public ViewComponentJSIBinder {
++protected:
++    facebook::jsi::Object createNativeProps(facebook::jsi::Runtime& rt) override;
++    facebook::jsi::Object createDirectEventTypes(facebook::jsi::Runtime& rt) override;
++};
++
++class RNGestureHandlerDetectorComponentInstance : public ViewComponentInstance {
++public:
++    using ViewComponentInstance::ViewComponentInstance;
++    ~RNGestureHandlerDetectorComponentInstance() override;
++
++    void onFinalizeUpdates() override;
++
++private:
++    folly::dynamic m_attachment = nullptr;
++};
++
++} // namespace rnoh
+diff --git a/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.cpp b/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.cpp
+index a3f9c4c..b6079af 100644
+--- a/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.cpp
++++ b/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.cpp
+@@ -3,6 +3,9 @@
+  */
+ 
+ #include "RNGestureHandlerModule.h"
++#if RNGH_WITH_WORKLETS
++#include <worklets/Compat/StableApi.h>
++#endif
+ 
+ namespace rnoh {
+ using namespace facebook;
+@@ -14,10 +17,51 @@ RNGestureHandlerModule::RNGestureHandlerModule(const ArkTSTurboModule::Context c
+         ARK_METHOD_METADATA(createGestureHandler, 3),
+         ARK_METHOD_METADATA(attachGestureHandler, 3),
+         ARK_METHOD_METADATA(updateGestureHandler, 2),
++        ARK_METHOD_METADATA(setGestureHandlerConfig, 2),
++        ARK_METHOD_METADATA(updateGestureHandlerConfig, 2),
++        ARK_METHOD_METADATA(configureRelations, 2),
++        {"getModuleId", {0, [](jsi::Runtime& rt, react::TurboModule& module, const jsi::Value* args, size_t count) {
++            auto& gestureModule = static_cast<RNGestureHandlerModule&>(module);
++            gestureModule.installStateSetter(rt, "_setGestureStateAsync", true);
++            return gestureModule.call(rt, "getModuleId", args, count);
++        }}},
++        {"installUIRuntimeBindings", {0, [](jsi::Runtime& rt, react::TurboModule& module, const jsi::Value*, size_t) {
++            auto& gestureModule = static_cast<RNGestureHandlerModule&>(module);
++            gestureModule.installStateSetter(rt, "_setGestureStateAsync", true);
++            return jsi::Value(gestureModule.installUIRuntimeBindings(rt));
++        }}},
+         ARK_METHOD_METADATA(dropGestureHandler, 1),
+         ARK_METHOD_METADATA(install, 0),
+         ARK_METHOD_METADATA(flushOperations, 0),
+     };
+ }
+ 
++void RNGestureHandlerModule::installStateSetter(jsi::Runtime& runtime, const char* name, bool async) {
++    runtime.global().setProperty(runtime, name, jsi::Function::createFromHostFunction(
++        runtime, jsi::PropNameID::forAscii(runtime, name), 2,
++        [weak = weak_from_this(), async](jsi::Runtime& rt, const jsi::Value&, const jsi::Value* args, size_t count) {
++            if (auto module = weak.lock(); module && count == 2) {
++                if (async) {
++                    module->scheduleCall(rt, "setGestureHandlerState", args, count);
++                } else {
++                    module->call(rt, "setGestureHandlerState", args, count);
++                }
++            }
++            return jsi::Value::undefined();
++        }));
++}
++
++bool RNGestureHandlerModule::installUIRuntimeBindings(jsi::Runtime& runtime) {
++#if RNGH_WITH_WORKLETS
++    auto holder = runtime.global().getProperty(runtime, "__RNGH_UI_WORKLET_RUNTIME_HOLDER");
++    if (holder.isObject()) {
++        if (auto worklet = worklets::getWorkletRuntimeFromHolder(runtime, holder.asObject(runtime))) {
++            installStateSetter(worklets::getJSIRuntimeFromWorkletRuntime(worklet), "_setGestureStateSync", false);
++            return true;
++        }
++    }
++#endif
++    return false;
++}
++
+ } // namespace rnoh
+diff --git a/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.h b/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.h
+index 28d5994..c89e903 100644
+--- a/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.h
++++ b/gesture/src/main/cpp/generated/RNOH/generated/turbo_modules/RNGestureHandlerModule.h
+@@ -8,9 +8,14 @@
+ 
+ namespace rnoh {
+ 
+-class JSI_EXPORT RNGestureHandlerModule : public ArkTSTurboModule {
++class JSI_EXPORT RNGestureHandlerModule : public ArkTSTurboModule,
++    public std::enable_shared_from_this<RNGestureHandlerModule> {
+   public:
+     RNGestureHandlerModule(const ArkTSTurboModule::Context ctx, const std::string name);
++
++  private:
++    void installStateSetter(facebook::jsi::Runtime& runtime, const char* name, bool async);
++    bool installUIRuntimeBindings(facebook::jsi::Runtime& runtime);
+ };
+ 
+ } // namespace rnoh
+diff --git a/gesture/src/main/ets/RNOHPackage.ets b/gesture/src/main/ets/RNOHPackage.ets
+index 27e44e8..05c6472 100644
+--- a/gesture/src/main/ets/RNOHPackage.ets
++++ b/gesture/src/main/ets/RNOHPackage.ets
+@@ -21,11 +21,11 @@
+  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  * SOFTWARE.
+  */
+-import { RNPackage, RNPackageContext } from "@rnoh/react-native-openharmony";
++import { RNOHPackage, RNPackageContext } from "@rnoh/react-native-openharmony";
+ import type { TurboModule, TurboModuleContext } from "@rnoh/react-native-openharmony/ts";
+ import { RNGestureHandlerModule } from './rnoh/RNGestureHandlerModule';
+ 
+-export default class RnohReactNativeHarmonyGestureHandlerPackage extends RNPackage {
++export default class RnohReactNativeHarmonyGestureHandlerPackage extends RNOHPackage {
+   private isRNGHDevModeEnabled: boolean
+ 
+   constructor(ctx: RNPackageContext, isRNGHDevModeEnabled: boolean = false) {
+diff --git a/gesture/src/main/ets/core/GestureHandler.ts b/gesture/src/main/ets/core/GestureHandler.ts
+index 3062281..631a788 100644
+--- a/gesture/src/main/ets/core/GestureHandler.ts
++++ b/gesture/src/main/ets/core/GestureHandler.ts
+@@ -89,7 +89,7 @@ export interface GestureConfig {
+ type PointerId = number
+ 
+ export interface ScrollLocker {
+-  lockScrollContainingViewTag(viewTag: number, simultaneousHandlers?: Handler[] | null): () => void,
++  lockScrollContainingViewTag(viewTag: number, simultaneousHandlerTags?: number[]): () => void,
+ }
+ 
+ export interface RNGestureResponder {
+@@ -405,6 +405,11 @@ export abstract class GestureHandler<TGestureConfig extends GestureConfig = Gest
+     stopTracing()
+   }
+ 
++  public onViewDetached() {
++    this.reset()
++    this.view = undefined
++  }
++
+   public getTag(): number {
+     return this.handlerTag
+   }
+diff --git a/gesture/src/main/ets/core/GestureHandlerRegistry.ts b/gesture/src/main/ets/core/GestureHandlerRegistry.ts
+index 915a659..0c180c0 100644
+--- a/gesture/src/main/ets/core/GestureHandlerRegistry.ts
++++ b/gesture/src/main/ets/core/GestureHandlerRegistry.ts
+@@ -44,6 +44,7 @@ export class GestureHandlerRegistry {
+   public bindGestureHandlerWithView(gestureHandlerTag: number, view: View) {
+     this.logger.cloneAndJoinPrefix("bindGestureHandlerWithView").debug({gestureHandlerTag, viewTag: view.getTag()})
+     const viewTag = view.getTag()
++    this.unbindGestureHandlerFromView(gestureHandlerTag)
+     if (!this.gestureHandlersByViewTag.has(viewTag))
+       this.gestureHandlersByViewTag.set(viewTag, new Set())
+     const gestureHandler = this.gestureHandlerByHandlerTag.get(gestureHandlerTag)
+@@ -55,13 +56,15 @@ export class GestureHandlerRegistry {
+     return Array.from(this.gestureHandlersByViewTag.get(viewTag) ?? [])
+   }
+ 
+-  public removeGestureHandlerByHandlerTag(handlerTag: number) {
++  public unbindGestureHandlerFromView(handlerTag: number) {
+     const gestureHandler = this.gestureHandlerByHandlerTag.get(handlerTag)
+     if (!gestureHandler) {
+       return;
+     }
+     const viewTag = gestureHandler.getView()?.getTag();
+-    if (viewTag) {
++    if (viewTag !== undefined) {
++      gestureHandler.cancel()
++      gestureHandler.onViewDetached()
+       const gestureHandlers = this.gestureHandlersByViewTag.get(viewTag)
+       if (gestureHandlers) {
+         gestureHandlers.delete(gestureHandler)
+@@ -71,12 +74,10 @@ export class GestureHandlerRegistry {
+         }
+       }
+     }
+-    if (gestureHandler.getView()) {
+-      // Handler is in "prepared" state which means it is registered in the orchestrator and can
+-      // receive touch events. This means that before we remove it from the registry we need to
+-      // "cancel" it so that orchestrator does no longer keep a reference to it.
+-      gestureHandler.cancel()
+-    }
++  }
++
++  public removeGestureHandlerByHandlerTag(handlerTag: number) {
++    this.unbindGestureHandlerFromView(handlerTag)
+     this.gestureHandlerByHandlerTag.delete(handlerTag)
+   }
+ 
+diff --git a/gesture/src/main/ets/core/InteractionManager.ts b/gesture/src/main/ets/core/InteractionManager.ts
+index c4d68c2..c9d9769 100644
+--- a/gesture/src/main/ets/core/InteractionManager.ts
++++ b/gesture/src/main/ets/core/InteractionManager.ts
+@@ -141,6 +141,10 @@ export class InteractionManager {
+     );
+   }
+ 
++  public getSimultaneousHandlerTags(handlerTag: GHTag) {
++    return this.simultaneousRelations.get(handlerTag)
++  }
++
+   public shouldHandlerBeCancelledBy(
+     handler: GestureHandler,
+     otherHandler: GestureHandler
+@@ -158,10 +162,12 @@ export class InteractionManager {
+   public dropRelationsForHandlerWithTag(handlerTag: number): void {
+     this.waitForRelations.delete(handlerTag);
+     this.simultaneousRelations.delete(handlerTag);
++    this.blocksHandlersRelations.delete(handlerTag);
+   }
+ 
+   public reset() {
+     this.waitForRelations.clear();
+     this.simultaneousRelations.clear();
++    this.blocksHandlersRelations.clear();
+   }
+ }
+\ No newline at end of file
+diff --git a/gesture/src/main/ets/generated/turboModules/RNGestureHandlerModule.ts b/gesture/src/main/ets/generated/turboModules/RNGestureHandlerModule.ts
+index b52c556..0f00968 100644
+--- a/gesture/src/main/ets/generated/turboModules/RNGestureHandlerModule.ts
++++ b/gesture/src/main/ets/generated/turboModules/RNGestureHandlerModule.ts
+@@ -18,6 +18,14 @@ export namespace RNGestureHandlerModule {
+   
+     updateGestureHandler(handlerTag: number, newConfig: Object): void;
+   
++    setGestureHandlerConfig(handlerTag: number, newConfig: Object): void;
++
++    updateGestureHandlerConfig(handlerTag: number, newConfig: Object): void;
++
++    configureRelations(handlerTag: number, relations: Object): void;
++
++    getModuleId(): number;
++
+     dropGestureHandler(handlerTag: number): void;
+   
+     install(): boolean;
+diff --git a/gesture/src/main/ets/gesture-handlers/PanGestureHandler.ts b/gesture/src/main/ets/gesture-handlers/PanGestureHandler.ts
+index c0e1c28..298ff46 100644
+--- a/gesture/src/main/ets/gesture-handlers/PanGestureHandler.ts
++++ b/gesture/src/main/ets/gesture-handlers/PanGestureHandler.ts
+@@ -385,7 +385,7 @@ export class PanGestureHandler extends GestureHandler<PanGestureHandlerConfig> {
+   protected onStateChange(newState: State, oldState: State) {
+     super.onStateChange(newState, oldState)
+     if (newState === State.BEGAN) {
+-      this.unlockScrolls = this.scrollLocker.lockScrollContainingViewTag(this.view.getTag(), this.config.simultaneousHandlers)
++      this.unlockScrolls = this.scrollLocker.lockScrollContainingViewTag(this.view.getTag(), this.interactionManager.getSimultaneousHandlerTags(this.getTag()))
+     } else if (newState !== State.ACTIVE) {
+       this.unlockScrolls?.()
+     }
+diff --git a/gesture/src/main/ets/gesture-handlers/RotationGestureHandler.ts b/gesture/src/main/ets/gesture-handlers/RotationGestureHandler.ts
+index 6cbdff1..392ad09 100644
+--- a/gesture/src/main/ets/gesture-handlers/RotationGestureHandler.ts
++++ b/gesture/src/main/ets/gesture-handlers/RotationGestureHandler.ts
+@@ -215,7 +215,7 @@ export class RotationGestureHandler extends GestureHandler {
+   protected onStateChange(newState: State, oldState: State) {
+     super.onStateChange(newState, oldState)
+     if (newState === State.BEGAN) {
+-      this.unlockScrolls = this.scrollLocker.lockScrollContainingViewTag(this.view?.getTag(), this.config.simultaneousHandlers)
++      this.unlockScrolls = this.scrollLocker.lockScrollContainingViewTag(this.view?.getTag(), this.interactionManager.getSimultaneousHandlerTags(this.getTag()))
+     } else if (newState !== State.ACTIVE) {
+       this.unlockScrolls?.()
+     }
+diff --git a/gesture/src/main/ets/rnoh/OutgoingEventDispatchers.ts b/gesture/src/main/ets/rnoh/OutgoingEventDispatchers.ts
+index f2c7504..1a1b67b 100644
+--- a/gesture/src/main/ets/rnoh/OutgoingEventDispatchers.ts
++++ b/gesture/src/main/ets/rnoh/OutgoingEventDispatchers.ts
+@@ -27,6 +27,8 @@ import {
+   GestureStateChangeEvent,
+   GestureUpdateEvent,
+   GestureTouchEvent,
++  GestureHandler,
++  PointerType,
+   RNGHLogger
+ } from "../core"
+ 
+@@ -127,3 +129,57 @@ export class ReanimatedEventDispatcher implements OutgoingEventDispatcher {
+     }
+   }
+ }
++
++
++type DetectorEvent = GestureStateChangeEvent | GestureUpdateEvent | GestureTouchEvent;
++
++export class DetectorEventDispatcher implements OutgoingEventDispatcher {
++  constructor(
++    private rnInstance: RNInstance,
++    private logger: RNGHLogger,
++    private detectorTag: number,
++    private handler: GestureHandler,
++    private config: Readonly<Record<string, unknown>>,
++  ) {}
++
++  public onGestureHandlerStateChange(event: GestureStateChangeEvent) {
++    this.emit('StateChange', event);
++  }
++
++  public onGestureHandlerEvent(event: DetectorEvent) {
++    this.emit('eventType' in event && typeof event.eventType === 'number' ? 'TouchEvent' : 'Event', event);
++  }
++
++  private emit(suffix: string, event: DetectorEvent) {
++    let pointerType = 4;
++    switch (this.handler.getPointerType()) {
++      case PointerType.TOUCH:
++        pointerType = 0;
++        break;
++      case PointerType.PEN:
++        pointerType = 1;
++        break;
++      case PointerType.MOUSE:
++        pointerType = 2;
++        break;
++    }
++
++    const prefix = this.config.dispatchesAnimatedEvents && suffix === 'Event'
++      ? 'onGestureHandlerAnimated'
++      : this.config.dispatchesReanimatedEvents
++        ? 'onGestureHandlerReanimated'
++        : 'onGestureHandler';
++    try {
++      if (suffix === 'TouchEvent') {
++        this.rnInstance.emitComponentEvent(this.detectorTag, prefix + suffix, { ...event, pointerType });
++      } else {
++        const { handlerTag, state, oldState, ...data } = event as GestureStateChangeEvent;
++        const payload = { handlerTag, state, handlerData: { ...data, pointerType } };
++        this.rnInstance.emitComponentEvent(this.detectorTag, prefix + suffix,
++          oldState === undefined ? payload : { ...payload, oldState });
++      }
++    } catch (error) {
++      this.logger.warn(`emitComponentEvent failed (detectorTag=${this.detectorTag}): ${error}`);
++    }
++  }
++}
+diff --git a/gesture/src/main/ets/rnoh/RNGHRootViewController.ts b/gesture/src/main/ets/rnoh/RNGHRootViewController.ts
+index 05ea4d7..bc2cb0c 100644
+--- a/gesture/src/main/ets/rnoh/RNGHRootViewController.ts
++++ b/gesture/src/main/ets/rnoh/RNGHRootViewController.ts
+@@ -58,7 +58,7 @@ export class RNGHRootViewController {
+   // from updating its state correctly.
+   private touchableViewsMultiset: Multiset<View> = new Multiset();
+   private viewControllerByViewTag: Map<number, RNGHViewController> =
+-    new Map(); // TODO: remove entry when view is removed
++    new Map();
+   /**
+    * A view is ACTIVE, if it recently received POINTER_DOWN event
+    */
+@@ -92,31 +92,13 @@ export class RNGHRootViewController {
+     const views = touchableViews as RNGHView[]
+     for (let i = 0; i < views.length; i++) {
+       const view = views[i];
+-      for (const handler of this.gestureHandlerRegistry.getGestureHandlersByViewTag(
+-        view.getTag(),
+-      )) {
+-        this.logger.info(
+-          `Found GestureHandler ${handler.getTag()} for view ${view.getTag()}`,
+-        );
+-
+-        // create view touch handler if necessary
+-        if (!this.viewControllerByViewTag.has(view.getTag())) {
+-          this.viewControllerByViewTag.set(
+-            view.getTag(),
+-            new RNGHViewController(
+-              view,
+-              this.logger,
+-            ),
+-          );
+-        }
+-
+-        // attach handler (there might be multiple handlers per view)
+-        this.viewControllerByViewTag.get(view.getTag())!.attachGestureHandler(handler) // TODO: detachGestureHandler
+-
+-        // register active view tag
+-        if (e.type === TouchType.Down) {
+-          this.activeViewTags.add(view.getTag());
++      const viewTag = view.getTag();
++      if (e.type === TouchType.Down &&
++          this.gestureHandlerRegistry.getGestureHandlersByViewTag(viewTag).length > 0) {
++        if (!this.viewControllerByViewTag.has(viewTag)) {
++          this.viewControllerByViewTag.set(viewTag, new RNGHViewController(view, this.logger));
+         }
++        this.activeViewTags.add(viewTag);
+       }
+ 
+       // If the pointer is inside the view but it overflows its parent, handlers attached to the parent
+@@ -138,9 +120,7 @@ export class RNGHRootViewController {
+       for (let i = tags.length - 1; i >= 0; i--) {
+         const tag = tags[i];
+         const viewController = this.viewControllerByViewTag.get(tag);
+-        if (viewController) {
+-          viewController.handleTouch(e);
+-        }
++        viewController?.handleTouch(e, this.gestureHandlerRegistry.getGestureHandlersByViewTag(tag));
+       }
+     }
+ 
+@@ -152,6 +132,11 @@ export class RNGHRootViewController {
+     stopTracing()
+   }
+ 
++  removeView(viewTag: number) {
++    this.viewControllerByViewTag.delete(viewTag);
++    this.activeViewTags.delete(viewTag);
++  }
++
+   cancelTouches() {
+     for (const activeViewTag of this.activeViewTags) {
+       this.gestureHandlerRegistry.getGestureHandlersByViewTag(activeViewTag).forEach(gh => {
+diff --git a/gesture/src/main/ets/rnoh/RNGHViewController.ts b/gesture/src/main/ets/rnoh/RNGHViewController.ts
+index e761531..6fc86ef 100644
+--- a/gesture/src/main/ets/rnoh/RNGHViewController.ts
++++ b/gesture/src/main/ets/rnoh/RNGHViewController.ts
+@@ -39,7 +39,6 @@ import { TouchEvent, TouchType, TouchObject } from './types';
+ export class RNGHViewController {
+   private activePointerIds = new Set<number>();
+   private pointerIdsInBounds = new Set<number>();
+-  private gestureHandlers = new Set<GestureHandler>();
+   private view: View;
+   private logger: RNGHLogger;
+ 
+@@ -51,22 +50,18 @@ export class RNGHViewController {
+     this.view = view;
+   }
+ 
+-  attachGestureHandler(gestureHandler: GestureHandler) {
+-    this.gestureHandlers.add(gestureHandler)
+-  }
+-
+-  handleTouch(e: TouchEvent) {
++  handleTouch(e: TouchEvent, gestureHandlers: GestureHandler[]) {
+     const logger = this.logger.cloneAndJoinPrefix("handleTouch")
+     const stopTracingA = logger.cloneAndJoinPrefix("A").startTracing()
+     for (const changedTouch of e.changedTouches) {
+-      if (this.shouldSkipTouch(changedTouch)) {
++      if (this.shouldSkipTouch(changedTouch, gestureHandlers)) {
+         continue;
+       }
+       const wasInBounds = this.pointerIdsInBounds.has(changedTouch.id);
+       const isInBounds = this.isInBounds({
+         x: changedTouch.windowX,
+         y: changedTouch.windowY,
+-      });
++      }, gestureHandlers);
+       logger.debug(
+         {
+           viewTag: this.view.getTag(),
+@@ -75,7 +70,7 @@ export class RNGHViewController {
+           isInBounds,
+         },
+       );
+-      const adaptedEvent = this.adaptTouchEvent(e, changedTouch);
++      const adaptedEvent = this.adaptTouchEvent(e, changedTouch, gestureHandlers);
+       stopTracingA()
+       const stopTracingB = logger.cloneAndJoinPrefix("B").startTracing()
+       
+@@ -84,7 +79,7 @@ export class RNGHViewController {
+       // order in which handlers has been added ("most direct" children goes first). As children
+       // are registered in order in which they should be tested, the sort function must be stable.
+       // HermesJS engine sort is stable, see https://github.com/facebook/hermes/commit/ec424a146638ab4dde53754598f12d83d22aa335
+-      const gestureHandlersArray = Array.from(this.gestureHandlers).sort(this.sortHandlers);
++      const gestureHandlersArray = gestureHandlers.sort(this.sortHandlers);
+       
+       gestureHandlersArray.forEach(gh => {
+         gh.setNumberOfPointers(adaptedEvent.pointerCount);
+@@ -123,25 +118,26 @@ export class RNGHViewController {
+     }
+   }
+ 
+-  private shouldSkipTouch(changedTouch: TouchObject): boolean {
++  private shouldSkipTouch(changedTouch: TouchObject, gestureHandlers: GestureHandler[]): boolean {
+     return (
+       changedTouch.type === TouchType.Down &&
+         !this.isInBounds({
+           x: changedTouch.windowX,
+           y: changedTouch.windowY,
+-        })
++        }, gestureHandlers)
+     );
+   }
+ 
+   private adaptTouchEvent(
+     e: TouchEvent,
+     changedTouch: TouchObject,
++    gestureHandlers: GestureHandler[],
+   ): IncomingEvent {
+     const xAbsolute = changedTouch.windowX;
+     const yAbsolute = changedTouch.windowY;
+     const eventType = this.mapTouchTypeToEventType(
+       changedTouch.type,
+-      this.isInBounds({ x: xAbsolute, y: yAbsolute }),
++      this.isInBounds({ x: xAbsolute, y: yAbsolute }, gestureHandlers),
+       changedTouch.id,
+       this.pointerIdsInBounds.has(changedTouch.id),
+     );
+@@ -152,6 +148,7 @@ export class RNGHViewController {
+       changedTouch.id,
+       xAbsolute,
+       yAbsolute,
++      gestureHandlers,
+     );
+     this.updateActivePointers(changedTouch.type, changedTouch.id);
+ 
+@@ -198,10 +195,11 @@ export class RNGHViewController {
+     pointerId: number,
+     x: number,
+     y: number,
++    gestureHandlers: GestureHandler[],
+   ) {
+     switch (touchType) {
+       case TouchType.Down:
+-        if (this.isInBounds({ x, y })) {
++        if (this.isInBounds({ x, y }, gestureHandlers)) {
+           this.pointerIdsInBounds.add(pointerId);
+         }
+         break;
+@@ -209,7 +207,7 @@ export class RNGHViewController {
+         if (this.isInBounds({
+           x,
+           y
+-        })) {
++        }, gestureHandlers)) {
+           this.pointerIdsInBounds.add(pointerId);
+         } else {
+           this.pointerIdsInBounds.delete(pointerId);
+@@ -224,7 +222,7 @@ export class RNGHViewController {
+     }
+   }
+ 
+-  private isInBounds(point: Point): boolean {
++  private isInBounds(point: Point, gestureHandlers: GestureHandler[]): boolean {
+     const rect = this.view.getBoundingRect();
+     this.logger.cloneAndJoinPrefix("isInBounds").debug({ rect })
+     if (this.view.isPositionInBounds(point)) {
+@@ -232,7 +230,7 @@ export class RNGHViewController {
+     }
+ 
+     // 如果不在基础视图边界内，检查是否在任何已绑定手势处理器的 hitSlop 扩展区域内
+-    for (const gh of this.gestureHandlers) {
++    for (const gh of gestureHandlers) {
+       const config = (gh as any).config;
+       if (config?.hitSlop) {
+         const hitSlop = config.hitSlop;
+diff --git a/gesture/src/main/ets/rnoh/RNGestureHandlerModule.ts b/gesture/src/main/ets/rnoh/RNGestureHandlerModule.ts
+index 4f816d9..bc52c2a 100644
+--- a/gesture/src/main/ets/rnoh/RNGestureHandlerModule.ts
++++ b/gesture/src/main/ets/rnoh/RNGestureHandlerModule.ts
+@@ -24,17 +24,18 @@
+ import { TurboModule, TurboModuleContext, Tag } from "@rnoh/react-native-openharmony/ts";
+ import { TM } from "../generated/ts"
+ import {
++  GestureHandler,
+   GestureHandlerRegistry,
+   State,
+   OutgoingEventDispatcher,
+   RNGHLogger,
+   InteractionManager,
+-  ViewRegistry
++  View
+ } from '../core';
+ import { GestureHandlerFactory } from "../gesture-handlers"
+ import { RNGHViewRegistry } from './RNGHViewRegistry';
+ import { DevelopmentRNGHLogger, ProductionRNGHLogger } from './Logger';
+-import { JSEventDispatcher, AnimatedEventDispatcher, ReanimatedEventDispatcher } from './OutgoingEventDispatchers'
++import { JSEventDispatcher, AnimatedEventDispatcher, ReanimatedEventDispatcher, DetectorEventDispatcher } from './OutgoingEventDispatchers'
+ import { RNOHScrollLockerCAPI } from "./RNOHScrollLocker"
+ import { RNGHRootViewController, RawTouchEvent } from "./RNGHRootViewController"
+ import { RNGHView } from "./RNGHView"
+@@ -48,16 +49,34 @@ export enum ActionType {
+ }
+ 
+ 
++type HandlerConfig = Readonly<Record<string, unknown>>
++
++type DetectorAttachment = {
++  tag: Tag
++  moduleId: number
++  handlerTags: Tag[]
++  childTag: Tag
++  virtualChildren: { viewTag: Tag; handlerTags: Tag[] }[]
++}
++
++type DetectorBinding = { detectorTag: Tag; viewTag: Tag; childTag?: Tag }
++
+ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureHandlerModule.Spec {
+   static readonly NAME = "RNGestureHandlerModule"
+ 
+   private gestureHandlerRegistry: GestureHandlerRegistry
+   private gestureHandlerFactory: GestureHandlerFactory | undefined = undefined
+-  private viewRegistry: ViewRegistry | undefined = undefined
++  private viewRegistry = new RNGHViewRegistry()
+   private logger: RNGHLogger
+   private cleanLogger: RNGHLogger
+   private rootViewControllerByRootTag = new Map<Tag, RNGHRootViewController>()
+   private interactionManager: InteractionManager
++  private handlerConfigs = new Map<Tag, HandlerConfig>()
++  private detectorHandlers = new Map<Tag, Set<Tag>>()
++  private detectorBindings = new Map<Tag, DetectorBinding>()
++
++  // Detector messages are routed to the owning RNInstance.
++  private readonly moduleId = 1
+ 
+   constructor(ctx: TurboModuleContext, isDevModeEnabled: boolean = false) {
+     super(ctx)
+@@ -70,6 +89,12 @@ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureH
+     this.interactionManager = new InteractionManager(this.cleanLogger)
+     this.gestureHandlerRegistry = new GestureHandlerRegistry(this.viewRegistry, this.cleanLogger)
+     if (this.ctx.rnInstance.getArchitecture() === "C_API") {
++      this.ctx.rnInstance.cppEventEmitter.subscribe("RNGH::DETECTOR_UPDATED", (detector: DetectorAttachment) => {
++        this.onDetectorUpdated(detector)
++      })
++      this.ctx.rnInstance.cppEventEmitter.subscribe("RNGH::DETECTOR_REMOVED", (tag: Tag) => {
++        this.removeDetector(tag)
++      })
+       this.ctx.rnInstance.cppEventEmitter.subscribe("RNGH::TOUCH_EVENT", (e: any) => {
+         this.onTouch(e)
+       })
+@@ -100,10 +125,6 @@ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureH
+     const logger = this.logger.cloneAndJoinPrefix("onTouch")
+     const stopTracing = logger.startTracing();
+     (() => {
+-      if (!(this.viewRegistry instanceof RNGHViewRegistry)) {
+-        logger.error("Expected ViewRegistryCAPI")
+-        return;
+-      }
+       const rootViewController = this.rootViewControllerByRootTag.get(e.rootTag)
+       if (!rootViewController) {
+         logger.error(`Couldn't find a rootViewController for a gesture root tag: ${e.rootTag}`)
+@@ -132,8 +153,10 @@ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureH
+   // -------------------------------------------------------------------------------------------------------------------
+ 
+   public install() {
++    if (this.gestureHandlerFactory) {
++      return true
++    }
+     const stopTracing = this.ctx.logger.clone("install").startTracing()
+-    this.viewRegistry = new RNGHViewRegistry()
+     const scrollLocker = new RNOHScrollLockerCAPI(this.ctx.rnInstance, this.cleanLogger, this.gestureHandlerRegistry);
+     const rnGestureResponder = new RNOHGestureResponder(this.ctx.rnInstance)
+     this.gestureHandlerFactory =
+@@ -150,15 +173,16 @@ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureH
+     const logger = this.logger.cloneAndJoinPrefix("createGestureHandler")
+     const stopTracing = logger.startTracing();
+     (() => {
+-      if (!this.gestureHandlerFactory) {
+-        logger.error("Trying to create a gesture handler before creating gesture handler factory")
++      this.install()
++      // The Harmony touch pipeline does not yet supply mouse/stylus hover events.
++      if (handlerName === "HoverGestureHandler") {
+         return
+       }
+       logger.debug({ handlerName, handlerTag, config })
+       const gestureHandler = this.gestureHandlerFactory.create(handlerName, handlerTag)
+       this.gestureHandlerRegistry.addGestureHandler(gestureHandler)
+       this.interactionManager.configureInteractions(gestureHandler, config);
+-      gestureHandler.updateGestureConfig(config)
++      this.setGestureHandlerConfig(handlerTag, config)
+     })()
+     stopTracing()
+   }
+@@ -171,38 +195,22 @@ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureH
+     const logger = this.logger.cloneAndJoinPrefix("attachGestureHandler")
+     const stopTracing = logger.startTracing();
+     (() => {
++      const handler = this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag)
++      if (!handler) {
++        return
++      }
+       const eventDispatcher = this.createEventDispatcher(actionType, viewTag)
+       if (!eventDispatcher) {
+         logger.error("RNGH: Couldn't create EventDispatcher")
+         return
+       }
+-      const viewRegistry = this.viewRegistry
+-      let view = this.viewRegistry.getViewByTag(viewTag)
+-      if (!view && viewRegistry instanceof RNGHViewRegistry) {
+-        view = new RNGHView({
+-          tag: viewTag,
+-          x: 0,
+-          y: 0,
+-          width: 0,
+-          height: 0,
+-          buttonRole: false,
+-          exclusive: true
+-        })
+-        viewRegistry.save(view)
+-      }
+-      if (!view) {
+-        logger.error("Expected view")
+-        return;
+-      }
+-      this.gestureHandlerRegistry.bindGestureHandlerWithView(handlerTag, view)
++      const view = this.getOrCreateView(viewTag)
++      this.bindHandler(handler, view, eventDispatcher)
+       this.gestureHandlerRegistry.getGestureHandlersByViewTag(view.getTag()).forEach((handler) => {
+         if (handler.isGestureContinuous() && eventDispatcher instanceof JSEventDispatcher) {
+           logger.warn(`Using JSEventDispatcher for a continuous gesture (${handler.getName()}). Gesture-driven animations may not be smooth. Consider using Animated.event.`)
+         }
+       })
+-      this.gestureHandlerRegistry
+-        .getGestureHandlerByHandlerTag(handlerTag)
+-        .setEventDispatcher(eventDispatcher)
+     })()
+     stopTracing()
+   }
+@@ -221,21 +229,142 @@ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureH
+     }
+   }
+ 
+-  public updateGestureHandler(
+-    handlerTag: number,
+-    newConfig: Readonly<Record<string, unknown>>
+-  ) {
+-    const stopTracing = this.logger.cloneAndJoinPrefix("updateGestureHandler").startTracing()
+-    const gestureHandler = this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag)
+-    this.interactionManager.configureInteractions(gestureHandler, newConfig);
+-    gestureHandler?.updateGestureConfig(newConfig)
+-    stopTracing()
++  private getOrCreateView(viewTag: Tag) {
++    let view = this.viewRegistry.getViewByTag(viewTag)
++    if (!view) {
++      view = new RNGHView({
++        tag: viewTag,
++        x: 0,
++        y: 0,
++        width: 0,
++        height: 0,
++        buttonRole: false,
++        exclusive: true
++      })
++      this.viewRegistry.save(view)
++    }
++    return view
++  }
++
++  private unbindHandler(handlerTag: Tag) {
++    const handler = this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag)
++    const viewTag = handler?.getView()?.getTag()
++    this.gestureHandlerRegistry.unbindGestureHandlerFromView(handlerTag)
++    if (viewTag !== undefined && this.gestureHandlerRegistry.getGestureHandlersByViewTag(viewTag).length === 0) {
++      this.rootViewControllerByRootTag.forEach(root => root.removeView(viewTag))
++    }
++  }
++
++  private bindHandler(handler: GestureHandler, view: View,
++    dispatcher: OutgoingEventDispatcher) {
++    if (handler.getView() !== view) {
++      this.unbindHandler(handler.getTag())
++      this.gestureHandlerRegistry.bindGestureHandlerWithView(handler.getTag(), view)
++    }
++    handler.setEventDispatcher(dispatcher)
++  }
++
++  public getModuleId(): number {
++    this.install()
++    return this.moduleId
++  }
++
++  private onDetectorUpdated(detector: DetectorAttachment) {
++    if (detector.moduleId !== this.moduleId) {
++      this.removeDetector(detector.tag)
++      return
++    }
++
++    const next = new Map<Tag, DetectorBinding>()
++    for (const handlerTag of detector.handlerTags) {
++      next.set(handlerTag, { detectorTag: detector.tag, viewTag: detector.tag, childTag: detector.childTag })
++    }
++    for (const child of detector.virtualChildren) {
++      for (const handlerTag of child.handlerTags) {
++        next.set(handlerTag, { detectorTag: detector.tag, viewTag: child.viewTag })
++      }
++    }
++
++    const previous = this.detectorHandlers.get(detector.tag)
++    previous?.forEach(handlerTag => {
++      if (!next.has(handlerTag)) {
++        this.removeDetectorBinding(detector.tag, handlerTag)
++      }
++    })
++    this.detectorHandlers.set(detector.tag, new Set(next.keys()))
++    next.forEach((binding, handlerTag) => {
++      this.detectorBindings.set(handlerTag, binding)
++      this.syncDetectorHandler(handlerTag)
++    })
++  }
++
++  private removeDetectorBinding(detectorTag: Tag, handlerTag: Tag) {
++    if (this.detectorBindings.get(handlerTag)?.detectorTag === detectorTag) {
++      this.detectorBindings.delete(handlerTag)
++      this.unbindHandler(handlerTag)
++    }
++  }
++
++  private removeDetector(detectorTag: Tag) {
++    this.detectorHandlers.get(detectorTag)?.forEach(handlerTag => {
++      this.removeDetectorBinding(detectorTag, handlerTag)
++    })
++    this.detectorHandlers.delete(detectorTag)
++  }
++
++  private syncDetectorHandler(handlerTag: Tag) {
++    const binding = this.detectorBindings.get(handlerTag)
++    const handler = this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag)
++    if (!binding || !handler) {
++      return
++    }
++    const viewTag = handler.getName() === "NativeViewGestureHandler" && binding.childTag !== undefined
++      ? binding.childTag
++      : binding.viewTag
++    if (!viewTag) {
++      this.unbindHandler(handlerTag)
++      return
++    }
++    this.bindHandler(handler, this.getOrCreateView(viewTag), new DetectorEventDispatcher(
++      this.ctx.rnInstance,
++      this.cleanLogger,
++      binding.detectorTag,
++      handler,
++      this.handlerConfigs.get(handlerTag) ?? {}
++    ))
++  }
++
++  public setGestureHandlerConfig(handlerTag: number, config: HandlerConfig) {
++    const handler = this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag)
++    if (handler) {
++      this.handlerConfigs.set(handlerTag, config)
++      handler.updateGestureConfig(config)
++      this.syncDetectorHandler(handlerTag)
++    }
++  }
++
++  public updateGestureHandlerConfig(handlerTag: number, config: HandlerConfig) {
++    this.setGestureHandlerConfig(handlerTag, { ...this.handlerConfigs.get(handlerTag), ...config })
++  }
++
++  public configureRelations(handlerTag: number, relations: HandlerConfig) {
++    const handler = this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag)
++    if (handler) {
++      this.interactionManager.configureInteractions(handler, relations)
++    }
++  }
++
++  public updateGestureHandler(handlerTag: number, config: HandlerConfig) {
++    this.configureRelations(handlerTag, config)
++    this.setGestureHandlerConfig(handlerTag, config)
+   }
+ 
+   public dropGestureHandler(handlerTag: number) {
+     const stopTracing = this.logger.cloneAndJoinPrefix("dropGestureHandler").startTracing()
+     this.interactionManager.dropRelationsForHandlerWithTag(handlerTag)
++    this.unbindHandler(handlerTag)
+     this.gestureHandlerRegistry.removeGestureHandlerByHandlerTag(handlerTag)
++    this.handlerConfigs.delete(handlerTag)
+     stopTracing()
+   }
+ 
+@@ -262,18 +391,22 @@ export class RNGestureHandlerModule extends TurboModule implements TM.RNGestureH
+   }
+ 
+   public getViewRegistry() {
+-    if (!this.viewRegistry) {
+-      this.logger.error("Tried to get viewRegistry before it was initialized")
+-      throw new Error("Tried to get viewRegistry before it was initialized")
+-    }
+     return this.viewRegistry
+   }
+ 
+   public setGestureHandlerState(handlerTag: number, newState: State) {
+     const handler = this.getGestureHandlerRegistry().getGestureHandlerByHandlerTag(handlerTag);
++    if (!handler?.getView() || !handler.getTrackedPointersID().length) {
++      return
++    }
+     switch (newState) {
+       case State.ACTIVE:
+-        handler.activate();
++        if (handler.getState() === State.UNDETERMINED) {
++          handler.begin()
++        }
++        if (handler.getState() === State.BEGAN) {
++          handler.activate()
++        }
+         break;
+       case State.BEGAN:
+         handler.begin();
+diff --git a/gesture/src/main/ets/rnoh/RNOHScrollLocker.ts b/gesture/src/main/ets/rnoh/RNOHScrollLocker.ts
+index 9283b58..5874009 100644
+--- a/gesture/src/main/ets/rnoh/RNOHScrollLocker.ts
++++ b/gesture/src/main/ets/rnoh/RNOHScrollLocker.ts
+@@ -26,7 +26,6 @@ import {
+   ScrollLocker,
+   RNGHLogger,
+   GestureHandlerRegistry,
+-  Handler,
+ } from '../core';
+ 
+ export class RNOHScrollLockerCAPI implements ScrollLocker {
+@@ -42,23 +41,18 @@ export class RNOHScrollLockerCAPI implements ScrollLocker {
+ 
+   lockScrollContainingViewTag(
+     viewTag: number,
+-    simultaneousHandlers?: Handler[] | null,
++    simultaneousHandlerTags: number[] = [],
+   ) {
+     // When acquiring a scroll lock, we need to check if there are any simultaneous handlers
+     // that are NativeViewGestureHandlers. If so, we need to release the scroll lock. On Android
+     // when NativeViewGestureHandler is used, touch events are passed directly to the wrapped view's
+     // touch event handler. In the case of ScrollView, this behavior causes scrolling to be unlocked
+     // even when other handlers which should block scrolling are active.
+-    const nativeViewGestureHandlers = (simultaneousHandlers ?? [])
+-      .map(handler =>
+-      typeof handler === 'number' ? handler : handler.handlerTag,
+-      )
+-      .map(handlerTag =>
+-      this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag),
+-      )
+-      .filter(handler => handler.getName() === 'NativeViewGestureHandler');
++    const hasNativeViewGesture = simultaneousHandlerTags.some(handlerTag =>
++      this.gestureHandlerRegistry.getGestureHandlerByHandlerTag(handlerTag)?.getName() === 'NativeViewGestureHandler'
++    );
+ 
+-    this.setScrollLock(viewTag, nativeViewGestureHandlers.length === 0);
++    this.setScrollLock(viewTag, !hasNativeViewGesture);
+ 
+     return () => this.setScrollLock(viewTag, false);
+   }

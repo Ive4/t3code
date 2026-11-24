@@ -4,9 +4,22 @@ Use this host to build a local HarmonyOS HAP from the shared mobile bundle. It u
 
 ## Prepare a candidate
 
-Install the mobile workspace dependencies so `react-native-worklets` 0.13.1 provides its `Common` sources. Use Git, ohpm, and DevEco Studio with the HarmonyOS SDK 26. Keep the candidate directory short on Windows for Ninja's path limits.
+Install the mobile and HarmonyOS workspace dependencies. Use Git with Git LFS, tar, ohpm, and DevEco Studio with the HarmonyOS SDK 26. Keep the candidate directory short on Windows for Ninja's path limits.
 
-Supply a local vendor root containing the prepared source modules below as sibling directories. Preparation checks the module names, native package versions, and selected patch markers. The prepared RNOH source was based on commit `07ae308f0e29be1306f7239cc452b3ec5d7cdad4`.
+To recreate the vendor directory, clone the [RNOH v0.88.0 tag](https://gitcode.com/oh-react-native/ohos_react_native/tree/v0.88.0) at `07ae308f0e29be1306f7239cc452b3ec5d7cdad4`. Run `pnpm init-ws` in the new RNOH checkout to prepare its submodules, ReactCommon, and JavaScript package. If the Hermes libraries are still LFS pointers, run these commands from the RNOH checkout.
+
+```sh
+git lfs install --local --skip-repo
+git lfs pull --include="**/prebuilt/**/libhermesvm.so" --exclude=""
+```
+
+From the T3 Code repository, run the bootstrap script with the prepared RNOH checkout and a new output directory. It verifies the published archives and applies the compatibility patches to the extracted source.
+
+```sh
+node apps/harmonyos/scripts/bootstrap-shared-vendor.cjs --rnoh-root <rnoh-checkout> --out <vendor-root>
+```
+
+You can also pass an existing prepared vendor root containing these modules as sibling directories. Candidate preparation checks the module names, versions, and patch markers.
 
 | Directory  | Package                                             | Version        | Notes                                                                                                                                                                        |
 | ---------- | --------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

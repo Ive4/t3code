@@ -1,0 +1,2 @@
+# Unified diffs preserve whitespace from the original vendor sources.
+*.patch whitespace=-blank-at-eol

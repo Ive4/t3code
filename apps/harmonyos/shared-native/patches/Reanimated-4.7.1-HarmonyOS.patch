@@ -1,0 +1,791 @@
+diff --git a/reanimated/src/main/cpp/CMakeLists.txt b/reanimated/src/main/cpp/CMakeLists.txt
+index ecc545c..b7157f3 100644
+--- a/reanimated/src/main/cpp/CMakeLists.txt
++++ b/reanimated/src/main/cpp/CMakeLists.txt
+@@ -1,7 +1,7 @@
+ cmake_minimum_required(VERSION 3.4.1)
+ set(CMAKE_VERBOSE_MAKEFILE on)
+ 
+-add_compile_definitions(REANIMATED_VERSION=4.5.3)
++add_compile_definitions(REANIMATED_VERSION=4.7.1)
+ add_compile_definitions(RCT_NEW_ARCH_ENABLED=1)
+ set(CMAKE_CXX_STANDARD 20)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+@@ -9,17 +9,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ add_compile_definitions(_LIBCPP_ENABLE_EXPERIMENTAL)
+ 
+ if(NOT DEFINED REANIMATED_FEATURE_FLAGS)
+-  set(REANIMATED_FEATURE_FLAGS "[RUNTIME_TEST_FLAG:false][DISABLE_COMMIT_PAUSING_MECHANISM:false][ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS:false][IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS:false][EXPERIMENTAL_CSS_ANIMATIONS_FOR_SVG_COMPONENTS:false][IOS_CSS_CORE_ANIMATION:false][USE_SYNCHRONIZABLE_FOR_MUTABLES:false][USE_COMMIT_HOOK_ONLY_FOR_REACT_COMMITS:false][ENABLE_SHARED_ELEMENT_TRANSITIONS:false][FORCE_REACT_RENDER_FOR_SETTLED_ANIMATIONS:false][USE_ANIMATION_BACKEND:false]")
++  set(REANIMATED_FEATURE_FLAGS "[RUNTIME_TEST_FLAG:false][DISABLE_COMMIT_PAUSING_MECHANISM:false][ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS:false][IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS:false][EXPERIMENTAL_CSS_ANIMATIONS_FOR_SVG_COMPONENTS:false][IOS_CSS_CORE_ANIMATION:false][ANDROID_CSS_PLATFORM_TRANSITIONS:false][USE_COMMIT_HOOK_ONLY_FOR_REACT_COMMITS:false][ENABLE_SHARED_ELEMENT_TRANSITIONS:false][USE_LEGACY_LAYOUT_ANIMATIONS_PROXY:false][FORCE_REACT_RENDER_FOR_SETTLED_ANIMATIONS:false][USE_ANIMATION_BACKEND:false]")
+ endif()
+ add_compile_definitions("REANIMATED_FEATURE_FLAGS=${REANIMATED_FEATURE_FLAGS}")
+ 
+-set(REANIMATED_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Common")
++set(REANIMATED_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Common471")
+ 
+ file(GLOB rnoh_reanimated_SRC CONFIGURE_DEPENDS *.cpp)
+-file(GLOB_RECURSE CSS_SRC
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/CSS/**/*.cpp"
++file(GLOB_RECURSE REANIMATED_CORE_SOURCES CONFIGURE_DEPENDS "${REANIMATED_SRC_DIR}/cpp/reanimated/*.cpp")
++list(APPEND rnoh_reanimated_SRC
++  ${REANIMATED_CORE_SOURCES}
++  "${REANIMATED_SRC_DIR}/NativeView/react/renderer/components/rnreanimated/REASharedTransitionBoundaryShadowNode.cpp"
+ )
+-list(APPEND rnoh_reanimated_SRC ${CSS_SRC})
+ 
+ add_library(rnoh_reanimated SHARED ${rnoh_reanimated_SRC})
+ 
+@@ -40,39 +41,9 @@ target_include_directories(
+   "${REANIMATED_SRC_DIR}/cpp/reanimated/PseudoStyles"
+   "${REANIMATED_SRC_DIR}/cpp/reanimated/Tools"
+   "${REANIMATED_SRC_DIR}/cpp/reanimated/RuntimeDecorators"
++  "${REANIMATED_SRC_DIR}/NativeView"
+   "${REANIMATED_SRC_DIR}/cpp"
+ )
+-target_sources(rnoh_reanimated 
+-  PRIVATE
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/AnimatedSensor/AnimatedSensorModule.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/CSS/InterpolatorRegistry.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Events/UIEventHandler.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Events/UIEventHandlerRegistry.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Fabric/updates/AnimatedPropsRegistry.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Fabric/updates/OperationsLoop.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Fabric/updates/UpdatesRegistry.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Fabric/updates/UpdatesRegistryManager.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Fabric/ReanimatedCommitHook.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Fabric/ReanimatedMountHook.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Fabric/ShadowTreeCloner.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/LayoutAnimations/LayoutAnimationsManager.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/LayoutAnimations/LayoutAnimationsProxy_Experimental.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/LayoutAnimations/LayoutAnimationsProxy_Legacy.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/LayoutAnimations/LayoutAnimationsProxyCommon.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/LayoutAnimations/LayoutAnimationsUtils.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/LayoutAnimations/PropsDiffer.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/LayoutAnimations/SharedTransitions.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/NativeModules/PropValueProcessor.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/NativeModules/SynchronousPropsBufferSerializer.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/PseudoStyles/PseudoStylesRegistry.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Tools/FeatureFlags.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/Tools/ReanimatedVersion.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/RuntimeDecorators/UIRuntimeDecorator.cpp"
+-  "${REANIMATED_SRC_DIR}/cpp/reanimated/RuntimeDecorators/RNRuntimeDecorator.cpp"
+-  "${REANIMATED_SRC_DIR}/NativeView/react/renderer/components/rnreanimated/REASharedTransitionBoundaryShadowNode.cpp"
+-  )
+-
+ target_include_directories(rnoh_reanimated PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+ target_link_libraries(rnoh_reanimated PUBLIC rnoh_worklets)
+ target_link_libraries(rnoh_reanimated PUBLIC rnoh)
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp
+index 15e9443..365fcd4 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp
+@@ -148,52 +148,6 @@ template TransformMatrix3D TransformOperationInterpolator<MatrixOperation>::inte
+     const TransformMatrix::Shared &,
+     const TransformMatrix::Shared &) const;
+ 
+-// Specialization for resolvable operations
+-template <ResolvableOp TOperation>
+-TransformOperationInterpolator<TOperation>::TransformOperationInterpolator(
+-    const std::shared_ptr<TOperation> &defaultOperation,
+-    ResolvableValueInterpolatorConfig config)
+-    : StyleOperationInterpolator(defaultOperation), config_(std::move(config)) {}
+-
+-template <ResolvableOp TOperation>
+-std::unique_ptr<StyleOperation> TransformOperationInterpolator<TOperation>::interpolate(
+-    double progress,
+-    const std::shared_ptr<StyleOperation> &from,
+-    const std::shared_ptr<StyleOperation> &to,
+-    const StyleOperationsInterpolationContext &context) const {
+-  const auto &fromOp = *std::static_pointer_cast<TOperation>(from);
+-  const auto &toOp = *std::static_pointer_cast<TOperation>(to);
+-
+-  return std::make_unique<TOperation>(fromOp.value.interpolate(progress, toOp.value, getRelativeValueContext(context)));
+-}
+-
+-template <ResolvableOp TOperation>
+-std::shared_ptr<StyleOperation> TransformOperationInterpolator<TOperation>::resolveOperation(
+-    const std::shared_ptr<StyleOperation> &operation,
+-    const StyleOperationsInterpolationContext &context) const {
+-  const auto &resolvableOp = std::static_pointer_cast<TOperation>(operation);
+-  const auto &resolved = resolvableOp->value.resolve(getRelativeValueContext(context));
+-
+-  if (!resolved.has_value()) {
+-    throw std::invalid_argument(
+-        "[Reanimated] Cannot resolve resolvable operation: " + operation->getOperationName() +
+-        " for node with tag: " + std::to_string(context.node->getTag()));
+-  }
+-
+-  return std::make_shared<TOperation>(resolved.value());
+-}
+-
+-template <ResolvableOp TOperation>
+-RelativeValueInterpolationContext TransformOperationInterpolator<TOperation>::getRelativeValueContext(
+-    const StyleOperationsInterpolationContext &context) const {
+-  return RelativeValueInterpolationContext{
+-      .node = context.node,
+-      .fallbackInterpolateThreshold = context.fallbackInterpolateThreshold,
+-      .viewStylesRepository = context.viewStylesRepository,
+-      .relativeProperty = config_.relativeProperty,
+-      .relativeTo = config_.relativeTo};
+-}
+-
+ // Rotate operations
+ template class TransformOperationInterpolator<RotateOperation>;
+ template class TransformOperationInterpolator<RotateXOperation>;
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h
+index 7263bfb..6a5d59b 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h
+@@ -6,6 +6,8 @@
+ #include <reanimated/CSS/interpolation/transforms/operations/perspective.h>
+ 
+ #include <memory>
++#include <stdexcept>
++#include <string>
+ 
+ namespace reanimated::css {
+ 
+@@ -58,28 +60,54 @@ class TransformOperationInterpolator<MatrixOperation> : public StyleOperationInt
+       const StyleOperationsInterpolationContext &context) const;
+ };
+ 
+-// Specialization for resolvable operations
++// SDK Clang rejects out-of-line members of this constrained partial specialization.
+ template <ResolvableOp TOperation>
+ class TransformOperationInterpolator<TOperation> : public StyleOperationInterpolator {
+  public:
+   TransformOperationInterpolator(
+       const std::shared_ptr<TOperation> &defaultOperation,
+-      ResolvableValueInterpolatorConfig config);
++      ResolvableValueInterpolatorConfig config)
++      : StyleOperationInterpolator(defaultOperation), config_(std::move(config)) {}
+ 
+   std::unique_ptr<StyleOperation> interpolate(
+       double progress,
+       const std::shared_ptr<StyleOperation> &from,
+       const std::shared_ptr<StyleOperation> &to,
+-      const StyleOperationsInterpolationContext &context) const override;
++      const StyleOperationsInterpolationContext &context) const override {
++    const auto &fromOp = *std::static_pointer_cast<TOperation>(from);
++    const auto &toOp = *std::static_pointer_cast<TOperation>(to);
++
++    return std::make_unique<TOperation>(
++        fromOp.value.interpolate(progress, toOp.value, getRelativeValueContext(context)));
++  }
+ 
+   std::shared_ptr<StyleOperation> resolveOperation(
+       const std::shared_ptr<StyleOperation> &operation,
+-      const StyleOperationsInterpolationContext &context) const override;
++      const StyleOperationsInterpolationContext &context) const override {
++    const auto &resolvableOp = std::static_pointer_cast<TOperation>(operation);
++    const auto &resolved = resolvableOp->value.resolve(getRelativeValueContext(context));
++
++    if (!resolved.has_value()) {
++      throw std::invalid_argument(
++          "[Reanimated] Cannot resolve resolvable operation: " + operation->getOperationName() +
++          " for node with tag: " + std::to_string(context.node->getTag()));
++    }
++
++    return std::make_shared<TOperation>(resolved.value());
++  }
+ 
+  protected:
+   const ResolvableValueInterpolatorConfig config_;
+ 
+-  RelativeValueInterpolationContext getRelativeValueContext(const StyleOperationsInterpolationContext &context) const;
++  RelativeValueInterpolationContext getRelativeValueContext(
++      const StyleOperationsInterpolationContext &context) const {
++    return RelativeValueInterpolationContext{
++        .node = context.node,
++        .fallbackInterpolateThreshold = context.fallbackInterpolateThreshold,
++        .viewStylesRepository = context.viewStylesRepository,
++        .relativeProperty = config_.relativeProperty,
++        .relativeTo = config_.relativeTo};
++  }
+ };
+ 
+ } // namespace reanimated::css
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/operations/matrix.cpp b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/operations/matrix.cpp
+index 1f4d445..848413f 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/operations/matrix.cpp
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/transforms/operations/matrix.cpp
+@@ -60,7 +60,9 @@ std::pair<TransformOperations, bool> flattenOperations(const TransformOperations
+  * operations can be converted to a matrix.
+  */
+ std::pair<MatrixOperationValue, bool> simplifyOperations(const TransformOperations &operations) {
+-  const auto [flattenedOperations, is3D] = flattenOperations(operations);
++  const auto flattened = flattenOperations(operations);
++  const auto &flattenedOperations = flattened.first;
++  const bool is3D = flattened.second;
+ 
+   TransformOperations result;
+   TransformOperations toSimplify;
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/values/ValueInterpolator.cpp b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/values/ValueInterpolator.cpp
+index ccd4d88..bd2a925 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/values/ValueInterpolator.cpp
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/interpolation/values/ValueInterpolator.cpp
+@@ -39,9 +39,9 @@ void ValueInterpolator::updateKeyframes(jsi::Runtime &rt, const jsi::Value &keyf
+ 
+   for (const auto &[offset, value] : parsedKeyframes) {
+     if (value.isUndefined()) {
+-      keyframes_.emplace_back(offset, std::nullopt);
++      keyframes_.push_back({offset, std::nullopt});
+     } else {
+-      keyframes_.emplace_back(offset, std::make_optional(createValue(rt, value)));
++      keyframes_.push_back({offset, std::make_optional(createValue(rt, value))});
+     }
+   }
+ }
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/svg/values/SVGStops.cpp b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/svg/values/SVGStops.cpp
+index 0d123bf..a2371de 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/svg/values/SVGStops.cpp
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/CSS/svg/values/SVGStops.cpp
+@@ -20,7 +20,7 @@ SVGStops::SVGStops(jsi::Runtime &rt, const jsi::Value &jsiValue) {
+     double offset = array.getValueAtIndex(rt, i).asNumber();
+     auto colorVal = array.getValueAtIndex(rt, i + 1);
+ 
+-    stops.emplace_back(offset, SVGBrush(rt, colorVal));
++    stops.push_back({offset, SVGBrush(rt, colorVal)});
+   }
+ }
+ 
+@@ -29,7 +29,7 @@ SVGStops::SVGStops(const folly::dynamic &value) {
+ 
+   for (size_t i = 0; i < value.size(); i += 2) {
+     double offset = value[i].asDouble();
+-    stops.emplace_back(offset, SVGBrush(value[i + 1]));
++    stops.push_back({offset, SVGBrush(value[i + 1])});
+   }
+ }
+ 
+@@ -137,7 +137,7 @@ SVGStops SVGStops::interpolate(double progress, const SVGStops &to) const {
+ 
+     SVGBrush mixedBrush = sFrom.color.interpolate(progress, sTo.color);
+ 
+-    interpolatedStops.emplace_back(mixedOffset, std::move(mixedBrush));
++    interpolatedStops.push_back({mixedOffset, std::move(mixedBrush)});
+   }
+ 
+   return SVGStops(std::move(interpolatedStops));
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/LayoutAnimations/SharedTransitions.cpp b/reanimated/src/main/cpp/Common471/cpp/reanimated/LayoutAnimations/SharedTransitions.cpp
+index e0e5230..1411528 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/LayoutAnimations/SharedTransitions.cpp
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/LayoutAnimations/SharedTransitions.cpp
+@@ -760,7 +760,7 @@ std::optional<Transform> LayoutAnimationsProxy::parseParentTransforms(
+   }
+   if (parentHasTransform) {
+     return Transform::FromTransformOperation(
+-        react::TransformOperation(TransformOperationType::Arbitrary), {}, combinedMatrix);
++        react::TransformOperation{TransformOperationType::Arbitrary}, {}, combinedMatrix);
+   }
+ 
+   return {};
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp b/reanimated/src/main/cpp/Common471/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp
+index 1c45066..21748b3 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp
+@@ -68,7 +68,7 @@ void mergeAnimatedProps(AnimatedProps &target, AnimatedProps &&source) {
+ constexpr bool shouldUseSynchronousUpdatesInPerformOperations() {
+   return StaticFeatureFlags::getFlag("ANDROID_SYNCHRONOUSLY_UPDATE_UI_PROPS");
+ }
+-#elif __APPLE__
++#elif defined(__APPLE__) || defined(__OHOS__)
+ constexpr bool shouldUseSynchronousUpdatesInPerformOperations() {
+   return StaticFeatureFlags::getFlag("IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS");
+ }
+@@ -1089,11 +1089,11 @@ void ReanimatedModuleProxy::writeSynchronousPropsToViews(const UpdatesBatch &syn
+   }
+ #endif // ANDROID
+ 
+-#if __APPLE__
++#if defined(__APPLE__) || defined(__OHOS__)
+   for (const auto &[shadowNodeFamily, props] : synchronousUpdatesBatch) {
+     synchronouslyUpdateUIPropsFunction_(shadowNodeFamily->getTag(), props);
+   }
+-#endif // __APPLE__
++#endif
+ }
+ 
+ void ReanimatedModuleProxy::requestFlushRegistry() {
+@@ -1115,7 +1115,10 @@ void ReanimatedModuleProxy::commitUpdates(const std::unordered_map<SurfaceId, Pr
+   const auto &shadowTreeRegistry = uiManager_->getShadowTreeRegistry();
+ 
+   // No registry lock is held here - shadowTree.commit re-enters via ReanimatedCommitHook.
+-  for (auto const &[surfaceId, propsMap] : propsMapBySurface) {
++  // The HarmonyOS SDK clang cannot capture structured bindings.
++  for (const auto &entry : propsMapBySurface) {
++    const auto surfaceId = entry.first;
++    const auto &propsMap = entry.second;
+     shadowTreeRegistry.visit(surfaceId, [&](ShadowTree const &shadowTree) {
+       const auto status = shadowTree.commit(
+           [&](RootShadowNode const &oldRootShadowNode) -> RootShadowNode::Unshared {
+diff --git a/reanimated/src/main/cpp/Common471/cpp/reanimated/Tools/PlatformDepMethodsHolder.h b/reanimated/src/main/cpp/Common471/cpp/reanimated/Tools/PlatformDepMethodsHolder.h
+index 08c3c9b..bdc2d85 100644
+--- a/reanimated/src/main/cpp/Common471/cpp/reanimated/Tools/PlatformDepMethodsHolder.h
++++ b/reanimated/src/main/cpp/Common471/cpp/reanimated/Tools/PlatformDepMethodsHolder.h
+@@ -32,7 +32,7 @@ using MeasureFunction = std::function<jsi::Value(jsi::Runtime &rt, const jsi::Va
+ using RequestRenderFunction = std::function<void(std::function<void(const double)>)>;
+ #ifdef ANDROID
+ using SynchronouslyUpdateUIPropsFunction = std::function<void(const std::vector<int> &, const std::vector<double> &)>;
+-#elif __APPLE__
++#elif defined(__APPLE__) || defined(__OHOS__)
+ using SynchronouslyUpdateUIPropsFunction = std::function<void(const int, const folly::dynamic &)>;
+ #endif // ANDROID
+ using PreserveMountedTagsFunction = std::function<std::optional<std::unique_ptr<int[]>>(std::vector<int> &)>;
+diff --git a/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.cpp b/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.cpp
+index 2f63390..74aa2f3 100644
+--- a/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.cpp
++++ b/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.cpp
+@@ -37,16 +37,12 @@ double wallClockMs() {
+       .count();
+ }
+ 
+-// CSS property -> the ArkUI node attribute that renders it. The routable set
+-// matches platform.cpp's OHOS whitelist (shadow* stays on the loop: ArkUI's
+-// NODE_SHADOW takes only predefined style enums).
+ std::optional<ArkUI_NodeAttributeType> attributeForProperty(const std::string &propertyName) {
+   static const std::unordered_map<std::string, ArkUI_NodeAttributeType> kAttributes = {
+       {"opacity", NODE_OPACITY},
+       {"backgroundColor", NODE_BACKGROUND_COLOR},
+       {"borderColor", NODE_BORDER_COLOR},
+       {"borderRadius", NODE_BORDER_RADIUS},
+-      {"borderWidth", NODE_BORDER_WIDTH},
+   };
+   const auto it = kAttributes.find(propertyName);
+   return it != kAttributes.end() ? std::optional<ArkUI_NodeAttributeType>(it->second) : std::nullopt;
+@@ -77,19 +73,6 @@ std::optional<AttributePayload> payloadForValue(const PlatformValue &value) {
+   return std::nullopt;
+ }
+ 
+-std::string describeValue(const PlatformValue &value) {
+-  if (const auto *scalar = std::get_if<double>(&value)) {
+-    return std::to_string(*scalar);
+-  }
+-  if (const auto *color = std::get_if<std::array<double, 4>>(&value)) {
+-    std::string out = "#" + std::to_string(argbFromColor(*color));
+-    return out;
+-  }
+-  return "size";
+-}
+-
+-// Only linear and cubic-bezier reach the backend (canRouteCSSProperty gate);
+-// steps / linear-stops would need per-frame interpolation on the loop.
+ ArkUI_CurveHandle createCurve(const EasingConfig &easing) {
+   if (const auto *bezier = std::get_if<CubicBezierEasing>(&easing)) {
+     return OH_ArkUI_Curve_CreateCubicBezierCurve(
+@@ -137,71 +120,25 @@ OHOSCSSPlatformTransitions::OHOSCSSPlatformTransitions(
+     std::weak_ptr<rnoh::TaskExecutor> taskExecutor)
+     : instance_(std::move(instance)), taskExecutor_(std::move(taskExecutor)) {}
+ 
+-bool OHOSCSSPlatformTransitions::applyTransitionForTag(
+-    jsi::Runtime &rt,
+-    const react::Tag viewTag,
+-    const std::string &propertyName,
+-    const jsi::Value &fromValue,
+-    const jsi::Value &toValue,
+-    const CSSTransitionPropertySettings &settings,
+-    const double timestamp) {
+-  const auto from = parsePlatformValue(rt, propertyName, fromValue);
+-  const auto to = parsePlatformValue(rt, propertyName, toValue);
+-  if (!from || !to || !attributeForProperty(propertyName) || !payloadForValue(*to)) {
+-    return false;
+-  }
+-  DLOG(INFO) << "[css-route] apply tag=" << viewTag << " prop=" << propertyName
+-             << " from=" << describeValue(*from) << " to=" << describeValue(*to)
+-             << " duration=" << settings.duration << " delay=" << settings.delay;
+-  applyForTag(viewTag, propertyName, *from, *to, settings, timestamp);
+-  return true;
++bool OHOSCSSPlatformTransitions::canRoute(const std::string &propertyName, const EasingConfig &easing) const {
++  return attributeForProperty(propertyName).has_value() &&
++      (std::holds_alternative<LinearEasing>(easing) || std::holds_alternative<CubicBezierEasing>(easing));
+ }
+ 
+-bool OHOSCSSPlatformTransitions::applyDynamicTransitionForTag(
+-    const react::Tag viewTag,
+-    const std::string &propertyName,
+-    const folly::dynamic &fromValue,
+-    const folly::dynamic &toValue,
+-    const double timestamp) {
+-  std::optional<CSSTransitionPropertySettings> settings;
+-  {
+-    std::lock_guard<std::mutex> lock(mutex_);
+-    const auto propertiesIt = active_.find(viewTag);
+-    if (propertiesIt == active_.end()) {
+-      return false;
+-    }
+-    const auto activeIt = propertiesIt->second.find(propertyName);
+-    if (activeIt == propertiesIt->second.end()) {
+-      // No config apply ran for this property, so there are no settings to reuse.
+-      return false;
+-    }
+-    settings = activeIt->second.settings;
+-  }
+-  const auto from = parsePlatformValue(propertyName, fromValue);
+-  const auto to = parsePlatformValue(propertyName, toValue);
+-  if (!from || !to || !attributeForProperty(propertyName) || !payloadForValue(*to)) {
+-    return false;
+-  }
+-  DLOG(INFO) << "[css-route] applyDynamic tag=" << viewTag << " prop=" << propertyName
+-             << " from=" << describeValue(*from) << " to=" << describeValue(*to);
+-  applyForTag(viewTag, propertyName, *from, *to, *settings, timestamp);
+-  return true;
+-}
+-
+-void OHOSCSSPlatformTransitions::removeTransitionForTag(
++void OHOSCSSPlatformTransitions::stopTransition(
+     const react::Tag viewTag, const std::string &propertyName) {
+   std::optional<PlatformValue> endValue;
+   {
+     std::lock_guard<std::mutex> lock(mutex_);
+-    const auto propertiesIt = active_.find(viewTag);
+-    if (propertiesIt != active_.end()) {
++    const auto propertiesIt = activeTargets_.find(viewTag);
++    if (propertiesIt != activeTargets_.end()) {
+       const auto activeIt = propertiesIt->second.find(propertyName);
+       if (activeIt != propertiesIt->second.end()) {
+-        endValue = activeIt->second.adjustedEnd;
++        endValue = activeIt->second;
+       }
+       propertiesIt->second.erase(propertyName);
+       if (propertiesIt->second.empty()) {
+-        active_.erase(propertiesIt);
++        activeTargets_.erase(propertiesIt);
+       }
+     }
+   }
+@@ -235,55 +172,35 @@ void OHOSCSSPlatformTransitions::removeTransitionForTag(
+   });
+ }
+ 
+-void OHOSCSSPlatformTransitions::applyForTag(
++bool OHOSCSSPlatformTransitions::startTransition(
+     const react::Tag viewTag,
+     const std::string &propertyName,
+-    const PlatformValue &fromValue,
++    const PlatformValue & /* fromValue */,
+     const PlatformValue &toValue,
+-    const CSSTransitionPropertySettings &settings,
+-    const double timestamp) {
++    const double durationMs,
++    const double startTimestampMs,
++    const EasingConfig &easing,
++    const bool /* persistent */) {
+   const auto attribute = attributeForProperty(propertyName);
+   const auto payload = payloadForValue(toValue);
+-  if (!attribute || !payload) {
+-    return;
++  if (!attribute || !payload || taskExecutor_.expired() || instance_.expired()) {
++    return false;
+   }
+ 
+-  ReversingState reversing;
+   {
+     std::lock_guard<std::mutex> lock(mutex_);
+-    auto &properties = active_[viewTag];
+-    const auto activeIt = properties.find(propertyName);
+-    // Targeting the in-flight transition's start value means this is a reversal.
+-    const bool isReversal =
+-        activeIt != properties.end() && toValue == activeIt->second.adjustedStart;
+-    if (isReversal) {
+-      reversing = reverseShorten(
+-          activeIt->second.reversing, timestamp, settings.duration, settings.delay, settings.easingConfig);
+-      DLOG(INFO) << "[css-route] reversal tag=" << viewTag << " prop=" << propertyName
+-                 << " shortened=" << reversing.duration << "ms";
+-    } else {
+-      reversing = makeReversingState(timestamp, settings.duration, settings.delay, settings.easingConfig);
+-    }
+-    properties[propertyName] = ActiveTransition{
+-        isReversal ? activeIt->second.adjustedEnd : fromValue, toValue, reversing, settings};
+-  }
+-
+-  // reversing.startTimestamp is absolute (ms); animateTo wants a relative
+-  // delay. Negative delays (already-part-elapsed W3C semantics) clamp to 0 —
+-  // ArkUI has no negative-delay form.
+-  double delayMs = reversing.startTimestamp - wallClockMs();
+-  if (delayMs < 0) {
+-    delayMs = 0;
++    activeTargets_[viewTag].insert_or_assign(propertyName, toValue);
+   }
+ 
++  const auto untilStartMs = startTimestampMs - wallClockMs();
+   AnimateRequest request{
+       viewTag,
+       propertyName,
+       *attribute,
+       *payload,
+-      std::max(0.0, reversing.duration),
+-      delayMs,
+-      settings.easingConfig};
++      std::max(0.0, durationMs + std::min(0.0, untilStartMs)),
++      std::max(0.0, untilStartMs),
++      easing};
+   const auto weakInstance = instance_;
+   runOnMain([weakInstance, request = std::move(request)]() {
+     ArkUI_NodeHandle node = resolveNode(weakInstance, request.tag);
+@@ -336,6 +253,7 @@ void OHOSCSSPlatformTransitions::applyForTag(
+                << " result=" << result << " duration=" << static_cast<int32_t>(request.durationMs)
+                << "ms delay=" << static_cast<int32_t>(request.delayMs) << "ms";
+   });
++  return true;
+ }
+ 
+ void OHOSCSSPlatformTransitions::runOnMain(std::function<void()> task) {
+diff --git a/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.h b/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.h
+index 6161a3a..26824b7 100644
+--- a/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.h
++++ b/reanimated/src/main/cpp/OHOSCSSPlatformTransitions.h
+@@ -4,13 +4,7 @@
+ 
+ #pragma once
+ 
+-#include <reanimated/CSS/configs/CSSTransitionConfig.h>
+-#include <reanimated/CSS/utils/platform.h>
+-#include <reanimated/CSS/utils/reversingShortening.h>
+-
+-#include <folly/dynamic.h>
+-#include <jsi/jsi.h>
+-#include <react/renderer/core/ReactPrimitives.h>
++#include <reanimated/CSS/core/transition/CSSPlatformTransitionBackend.h>
+ 
+ #include <functional>
+ #include <memory>
+@@ -25,68 +19,30 @@ class TaskExecutor;
+ 
+ namespace reanimated::css {
+ 
+-// Per-property state for an in-flight native transition. adjustedStart/adjustedEnd
+-// and the reversing snapshot handle interruptions; settings are reused by the
+-// toggle path. (Mirrors the Apple backend's ActiveTransition.)
+-struct ActiveTransition {
+-  PlatformValue adjustedStart;
+-  PlatformValue adjustedEnd;
+-  ReversingState reversing;
+-  CSSTransitionPropertySettings settings;
+-};
+-
+-/// ArkUI-backed CSS transition backend — the OHOS counterpart of Apple's
+-/// REACSSPlatformTransitions. Routed properties animate via
+-/// ArkUI_NativeAnimateAPI_1::animateTo on the real UI nodes (implicit
+-/// attribute animation) instead of being interpolated per-frame on the
+-/// reanimated loop.
+-///
+-/// The state map is mutex-guarded (routing can arrive from the JS thread as
+-/// well as the operations loop); the ArkUI work always runs on MAIN and the
+-/// posted closures only carry copies, never map references.
+-class OHOSCSSPlatformTransitions {
++class OHOSCSSPlatformTransitions : public CSSPlatformTransitionBackend {
+  public:
+   OHOSCSSPlatformTransitions(
+       std::weak_ptr<rnoh::RNInstance> instance,
+       std::weak_ptr<rnoh::TaskExecutor> taskExecutor);
+ 
+-  /// Config path (CSSPlatformTransitionProxy's applyJSI hook). Returns false
+-  /// when the platform can't express an endpoint — the proxy then falls back
+-  /// to the loop for this property.
+-  bool applyTransitionForTag(
+-      facebook::jsi::Runtime &rt,
+-      react::Tag viewTag,
+-      const std::string &propertyName,
+-      const facebook::jsi::Value &fromValue,
+-      const facebook::jsi::Value &toValue,
+-      const CSSTransitionPropertySettings &settings,
+-      double timestamp);
+-
+-  /// Pseudo-selector toggle path: reuses the settings of the active transition.
+-  bool applyDynamicTransitionForTag(
+-      react::Tag viewTag,
+-      const std::string &propertyName,
+-      const folly::dynamic &fromValue,
+-      const folly::dynamic &toValue,
+-      double timestamp);
+-
+-  /// Cancels the property's native transition and drops its platform-side state.
+-  void removeTransitionForTag(react::Tag viewTag, const std::string &propertyName);
++  bool canRoute(const std::string &propertyName, const EasingConfig &easing) const override;
+ 
+- private:
+-  // Reverse-shortens against any in-flight transition (W3C reversing),
+-  // records the new active state and kicks off the ArkUI animation.
+-  void applyForTag(
++  bool startTransition(
+       react::Tag viewTag,
+       const std::string &propertyName,
+       const PlatformValue &fromValue,
+       const PlatformValue &toValue,
+-      const CSSTransitionPropertySettings &settings,
+-      double timestamp);
++      double durationMs,
++      double startTimestampMs,
++      const EasingConfig &easing,
++      bool persistent) override;
++
++  void stopTransition(react::Tag viewTag, const std::string &propertyName) override;
+ 
++ private:
+   void runOnMain(std::function<void()> task);
+ 
+-  std::unordered_map<react::Tag, std::unordered_map<std::string, ActiveTransition>> active_;
++  std::unordered_map<react::Tag, std::unordered_map<std::string, PlatformValue>> activeTargets_;
+   std::mutex mutex_;
+   std::weak_ptr<rnoh::RNInstance> instance_;
+   std::weak_ptr<rnoh::TaskExecutor> taskExecutor_;
+diff --git a/reanimated/src/main/cpp/REASharedTransitionBoundaryComponentInstance.h b/reanimated/src/main/cpp/REASharedTransitionBoundaryComponentInstance.h
+index 3a1f326..e63f3b2 100644
+--- a/reanimated/src/main/cpp/REASharedTransitionBoundaryComponentInstance.h
++++ b/reanimated/src/main/cpp/REASharedTransitionBoundaryComponentInstance.h
+@@ -4,7 +4,7 @@
+ 
+ #pragma once
+ 
+-#include "Common/NativeView/react/renderer/components/rnreanimated/REASharedTransitionBoundaryShadowNode.h"
++#include "react/renderer/components/rnreanimated/REASharedTransitionBoundaryShadowNode.h"
+ #include "RNOH/CppComponentInstance.h"
+ #include "RNOH/arkui/CustomNode.h"
+ 
+diff --git a/reanimated/src/main/cpp/ReanimatedModule.cpp b/reanimated/src/main/cpp/ReanimatedModule.cpp
+index 8569c42..e66a3a1 100644
+--- a/reanimated/src/main/cpp/ReanimatedModule.cpp
++++ b/reanimated/src/main/cpp/ReanimatedModule.cpp
+@@ -8,13 +8,13 @@
+ #include "PseudoSelectorManager.h"
+ #include "ReanimatedSensorContainer.h"
+ #include "PlatformDepMethodsHolder.h"
+-#include "WorkletRuntimeCollector.h"
+ #include "RNRuntimeDecorator.h"
+ #include "TransformParser.h"
+ #include "RNOH/RNInstanceCAPI.h"
+ #include "WorkletsModule.h"
+ #include "ReanimatedNodesManager.h"
+ #include "OHOSCSSPlatformTransitions.h"
++#include <reanimated/Tools/FeatureFlags.h>
+ using namespace facebook;
+ using namespace reanimated;
+ using namespace worklets;
+@@ -181,54 +181,24 @@ void ReanimatedModule::installTurboModule(facebook::jsi::Runtime &rt) {
+         pseudoSelectorManager->detach(tag, pseudoSelector);
+     };
+ 
+-    // CSS transition routing backend (IOS_CSS_CORE_ANIMATION flag)
+-    auto cssPlatformTransitions = std::make_shared<css::OHOSCSSPlatformTransitions>(
+-        m_ctx.instance, std::weak_ptr(m_ctx.taskExecutor));
+-    auto cssCanRouteProperty = [](const std::string &propertyName, const css::EasingConfig &easing) {
+-        return css::canRouteCSSProperty(propertyName, easing);
+-    };
+-    auto cssApplyTransitionJSI = [cssPlatformTransitions](
+-                                     jsi::Runtime &rt,
+-                                     Tag viewTag,
+-                                     const std::string &propertyName,
+-                                     const jsi::Value &fromValue,
+-                                     const jsi::Value &toValue,
+-                                     const css::CSSTransitionPropertySettings &settings,
+-                                     double timestamp) {
+-        return cssPlatformTransitions->applyTransitionForTag(
+-            rt, viewTag, propertyName, fromValue, toValue, settings, timestamp);
+-    };
+-    auto cssApplyTransitionDynamic = [cssPlatformTransitions](
+-                                         Tag viewTag,
+-                                         const std::string &propertyName,
+-                                         const folly::dynamic &fromValue,
+-                                         const folly::dynamic &toValue,
+-                                         double timestamp) {
+-        return cssPlatformTransitions->applyDynamicTransitionForTag(
+-            viewTag, propertyName, fromValue, toValue, timestamp);
+-    };
+-    auto cssRemoveTransition = [cssPlatformTransitions](
+-                                   Tag viewTag, const std::string &propertyName) {
+-        cssPlatformTransitions->removeTransitionForTag(viewTag, propertyName);
+-    };
+-
+     PlatformDepMethodsHolder platformDepMethodsHolder = {
+-        requestRender,
+-        synchronouslyUpdateUIPropsFunction,
+-        getAnimationTimestamp,
+-        registerSensorFunction,
+-        unregisterSensorFunction,
+-        setGestureStateFunction,
+-        subscribeForKeyboardEventsFunction,
+-        unsubscribeFromKeyboardEventsFunction,
+-        maybeFlushUIUpdatesQueueFunction,
+-        attachPseudoSelector,
+-        detachPseudoSelector,
+-        cssCanRouteProperty,
+-        cssApplyTransitionJSI,
+-        cssApplyTransitionDynamic,
+-        cssRemoveTransition,
++        .requestRender = requestRender,
++        .synchronouslyUpdateUIPropsFunction = synchronouslyUpdateUIPropsFunction,
++        .getAnimationTimestamp = getAnimationTimestamp,
++        .registerSensor = registerSensorFunction,
++        .unregisterSensor = unregisterSensorFunction,
++        .setGestureStateFunction = setGestureStateFunction,
++        .subscribeForKeyboardEvents = subscribeForKeyboardEventsFunction,
++        .unsubscribeFromKeyboardEvents = unsubscribeFromKeyboardEventsFunction,
++        .maybeFlushUIUpdatesQueueFunction = maybeFlushUIUpdatesQueueFunction,
++        .attachPseudoSelector = attachPseudoSelector,
++        .detachPseudoSelector = detachPseudoSelector,
+     };
++    if constexpr (reanimated::StaticFeatureFlags::getFlag("IOS_CSS_CORE_ANIMATION")) {
++        platformDepMethodsHolder.platformTransitionBackend =
++            std::make_shared<css::OHOSCSSPlatformTransitions>(m_ctx.instance, m_ctx.taskExecutor);
++    }
++
+     bool isReducedMotion = false; // ANIMATOR_DURATION_SCALE
+     m_ctx.taskExecutor->runSyncTask(TaskThread::MAIN,
+         [ctx = m_ctx, &isReducedMotion]() {
+@@ -281,7 +251,6 @@ void ReanimatedModule::installTurboModule(facebook::jsi::Runtime &rt) {
+     };
+     nodesManager->registerPerformOperations(reanimatedPerformOperations);
+ 
+-    WorkletRuntimeCollector::install(rt);
+     auto &uiRuntime = workletsProxy->getUIWorkletRuntime()->getJSIRuntime();
+ 
+     RNRuntimeDecorator::decorate(rt, uiRuntime, reanimatedModuleProxy);
+diff --git a/reanimated/src/main/cpp/ReanimatedPackage.cpp b/reanimated/src/main/cpp/ReanimatedPackage.cpp
+index b53d9c1..540a3b3 100644
+--- a/reanimated/src/main/cpp/ReanimatedPackage.cpp
++++ b/reanimated/src/main/cpp/ReanimatedPackage.cpp
+@@ -7,7 +7,7 @@
+ #include "REASharedTransitionBoundaryComponentInstance.h"
+ 
+ #include "REASharedTransitionBoundaryJSIBinder.h"
+-#include "Common/NativeView/react/renderer/components/rnreanimated/REASharedTransitionBoundaryComponentDescriptor.h"
++#include "react/renderer/components/rnreanimated/REASharedTransitionBoundaryComponentDescriptor.h"
+ 
+ using namespace rnoh;
+ using namespace facebook;
+diff --git a/reanimated/src/main/cpp/ReanimatedUIScheduler.cpp b/reanimated/src/main/cpp/ReanimatedUIScheduler.cpp
+index 4988f48..c970ec1 100644
+--- a/reanimated/src/main/cpp/ReanimatedUIScheduler.cpp
++++ b/reanimated/src/main/cpp/ReanimatedUIScheduler.cpp
+@@ -7,13 +7,16 @@
+ namespace rnoh {
+ ReanimatedUIScheduler::ReanimatedUIScheduler(std::shared_ptr<TaskExecutor> taskExecutor) : m_taskExecutor(taskExecutor)
+ {}
++bool ReanimatedUIScheduler::queryIsOnUIThread() const {
++    return m_taskExecutor->isOnTaskThread(TaskThread::MAIN);
++}
+ void ReanimatedUIScheduler::scheduleOnUI(std::function<void()> job)
+ {
+-    if (m_taskExecutor->isOnTaskThread(TaskThread::MAIN)) {
++    if (isOnUIThread()) {
+         job();
+         return;
+     }
+-    UIScheduler::scheduleOnUI(job);
++    UIScheduler::scheduleOnUI(std::move(job));
+     if (!scheduledOnUI_.exchange(true)) {
+         m_taskExecutor->runTask(TaskThread::MAIN, [weakSelf = weak_from_this()]() {
+             if (auto self = weakSelf.lock()) {
+diff --git a/reanimated/src/main/cpp/ReanimatedUIScheduler.h b/reanimated/src/main/cpp/ReanimatedUIScheduler.h
+index a8686da..b201088 100644
+--- a/reanimated/src/main/cpp/ReanimatedUIScheduler.h
++++ b/reanimated/src/main/cpp/ReanimatedUIScheduler.h
+@@ -12,6 +12,7 @@ namespace rnoh {
+ class ReanimatedUIScheduler : public std::enable_shared_from_this<ReanimatedUIScheduler>,
+                               public worklets::UIScheduler {
+ private:
++    bool queryIsOnUIThread() const override;
+     std::shared_ptr<TaskExecutor> m_taskExecutor;
+ 
+ public:

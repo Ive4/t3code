@@ -1,0 +1,12 @@
+diff --git a/rn/src/main/cpp/RNOH/RNInstanceInternal.cpp b/rn/src/main/cpp/RNOH/RNInstanceInternal.cpp
+--- a/rn/src/main/cpp/RNOH/RNInstanceInternal.cpp
++++ b/rn/src/main/cpp/RNOH/RNInstanceInternal.cpp
+@@ -282,6 +282,8 @@ void RNInstanceInternal::initializeScheduler(
+   react::SchedulerToolbox schedulerToolbox{
+       .contextContainer = m_contextContainer,
+       .componentRegistryFactory = std::move(componentRegistryFactory),
++      .bridgelessBindingsExecutor =
++          m_reactInstance->getUnbufferedRuntimeExecutor(),
+       .runtimeExecutor = runtimeExecutor,
+       .eventBeatFactory = std::move(eventBeatFactory),
+ #ifdef ANIMATION_BACKEND_ON
