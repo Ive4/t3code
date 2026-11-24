@@ -741,6 +741,16 @@ index 8569c42..e66a3a1 100644
      auto &uiRuntime = workletsProxy->getUIWorkletRuntime()->getJSIRuntime();
  
      RNRuntimeDecorator::decorate(rt, uiRuntime, reanimatedModuleProxy);
+diff --git a/reanimated/src/main/cpp/ReanimatedNodesManager.cpp b/reanimated/src/main/cpp/ReanimatedNodesManager.cpp
+--- a/reanimated/src/main/cpp/ReanimatedNodesManager.cpp
++++ b/reanimated/src/main/cpp/ReanimatedNodesManager.cpp
+@@ -29,6 +29,5 @@
+ void ReanimatedNodesManager::postOnAnimation(ReanimatedOnAnimationCallback callback)
+ {
+-    LOG(INFO)<<"react_work reanimated------>postOnAnimation";
+     onAnimationCallbacks.push_back(std::move(callback));
+     m_vsyncHandle.requestFrame(vsyncHandleCallback, this);
+ }
 diff --git a/reanimated/src/main/cpp/ReanimatedPackage.cpp b/reanimated/src/main/cpp/ReanimatedPackage.cpp
 index b53d9c1..540a3b3 100644
 --- a/reanimated/src/main/cpp/ReanimatedPackage.cpp

@@ -1,12 +1,12 @@
-import { Pressable } from "react-native";
 import type { FloatingActionButtonProps } from "./FloatingActionButton.types";
 import { AppText } from "./AppText";
 import { SymbolView } from "./AppSymbol";
 import { cn } from "../../lib/cn";
+import { ControlPressable } from "./ControlPressable";
 
 export function FloatingActionButton(props: FloatingActionButtonProps) {
   return (
-    <Pressable
+    <ControlPressable
       accessibilityRole="button"
       accessibilityLabel={props.label}
       onPress={props.onPress}
@@ -34,6 +34,6 @@ export function FloatingActionButton(props: FloatingActionButtonProps) {
           {props.label}
         </AppText>
       ) : null}
-    </Pressable>
+    </ControlPressable>
   );
 }

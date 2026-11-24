@@ -1,8 +1,8 @@
 import type { IconButtonProps } from "./IconButton.types";
 import { cn } from "../../lib/cn";
-import { Pressable } from "react-native";
 
 import { SymbolView } from "./AppSymbol";
+import { ControlPressable } from "./ControlPressable";
 
 const VARIANT_CLASS_NAMES = {
   standard: ["", "accent-foreground"],
@@ -15,7 +15,7 @@ export function IconButton(props: IconButtonProps) {
   const variant = props.variant ?? "standard";
   const [containerClassName, iconTintClassName] = VARIANT_CLASS_NAMES[variant];
   return (
-    <Pressable
+    <ControlPressable
       onPress={props.onPress}
       disabled={props.disabled}
       accessibilityLabel={props.accessibilityLabel}
@@ -39,6 +39,6 @@ export function IconButton(props: IconButtonProps) {
               : iconTintClassName
         }
       />
-    </Pressable>
+    </ControlPressable>
   );
 }

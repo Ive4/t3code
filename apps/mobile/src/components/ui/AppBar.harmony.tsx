@@ -1,10 +1,18 @@
 import { useGT } from "gt-react-native";
 import { use, useRef, useState } from "react";
-import { Keyboard, Modal, Pressable, ScrollView, View, type TextInputInstance } from "react-native";
+import { Keyboard, Modal, Pressable, View, type TextInputInstance } from "react-native";
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  ReduceMotion,
+  useReducedMotion,
+} from "react-native-reanimated";
 
 import { InspectorCloseContext } from "../../features/layout/inspector-bar-store";
 import { useAdaptiveWorkspaceLayout } from "../../features/layout/adaptive-workspace-context";
 import { useSidebarToggle } from "../../features/layout/useSidebarToggle";
+import { MOBILE_MOTION } from "../../lib/designTokens";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { AppActivityIndicator } from "./AppActivityIndicator";
 import type { AppBarMenu, AppBarMenuItem, AppBarProps } from "./AppBar.types";
@@ -17,6 +25,11 @@ import { SearchField } from "./SearchField";
 import { useToolbarLayout } from "./useToolbarLayout";
 
 const iconTint = "accent-header-foreground";
+const SEARCH_ENTER = FadeIn.duration(MOBILE_MOTION.adjust).reduceMotion(ReduceMotion.System);
+const MENU_ENTER = FadeInDown.duration(MOBILE_MOTION.enter)
+  .easing(Easing.out(Easing.cubic))
+  .withInitialValues({ opacity: 0.85, transform: [{ translateY: 12 }] })
+  .reduceMotion(ReduceMotion.System);
 
 export function AppBar(props: AppBarProps) {
   const gt = useGT();
@@ -27,6 +40,7 @@ export function AppBar(props: AppBarProps) {
   const { height, paddingTop, paddingBottom } = useToolbarLayout(props.sheet || inFormSheet);
   const [searchOpen, setSearchOpen] = useState(false);
   const [menu, setMenu] = useState<AppBarMenu | null>(null);
+  const reduceMotion = useReducedMotion();
   const inputRef = useRef<TextInputInstance>(null);
   const search = props.search;
   const inlineSearch = search?.mode === "inline";
@@ -79,15 +93,20 @@ export function AppBar(props: AppBarProps) {
             (sidebarToggle && !props.sheet ? <IconButton {...sidebarToggle} /> : null))
           )}
           {searching ? (
-            <SearchField
-              inputRef={inputRef}
-              autoFocus={!inlineSearch}
-              accessibilityLabel={searchLabel}
-              clearAccessibilityLabel={search.clearAccessibilityLabel ?? gt("Clear search")}
-              placeholder={search.placeholder}
-              value={search.value}
-              onChangeText={search.onChangeText}
-            />
+            <Animated.View
+              className="min-w-0 flex-1"
+              entering={inlineSearch ? undefined : SEARCH_ENTER}
+            >
+              <SearchField
+                inputRef={inputRef}
+                autoFocus={!inlineSearch}
+                accessibilityLabel={searchLabel}
+                clearAccessibilityLabel={search.clearAccessibilityLabel ?? gt("Clear search")}
+                placeholder={search.placeholder}
+                value={search.value}
+                onChangeText={search.onChangeText}
+              />
+            </Animated.View>
           ) : (
             <View className="min-w-0 flex-1">
               {props.titleContent ?? (
@@ -155,7 +174,11 @@ export function AppBar(props: AppBarProps) {
         </View>
       </View>
       {menu ? (
-        <Modal transparent animationType="fade" onRequestClose={() => setMenu(null)}>
+        <Modal
+          transparent
+          animationType={reduceMotion ? "none" : "fade"}
+          onRequestClose={() => setMenu(null)}
+        >
           <View className="flex-1 justify-center p-6">
             <Pressable
               className="absolute inset-0 bg-black/40"
@@ -163,11 +186,14 @@ export function AppBar(props: AppBarProps) {
               accessibilityLabel={gt("Close")}
               onPress={() => setMenu(null)}
             />
-            <ScrollView className="max-h-[75%] grow-0 rounded-2xl bg-grouped-card">
+            <Animated.ScrollView
+              className="max-h-[75%] grow-0 rounded-2xl bg-grouped-card"
+              entering={MENU_ENTER}
+            >
               {menu.items.map((item) => (
                 <MenuItem key={item.id} item={item} onSelect={() => setMenu(null)} />
               ))}
-            </ScrollView>
+            </Animated.ScrollView>
           </View>
         </Modal>
       ) : null}

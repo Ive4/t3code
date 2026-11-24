@@ -1,7 +1,8 @@
 import type { RefObject } from "react";
-import { Pressable, TextInput, type TextInputInstance, View } from "react-native";
+import { TextInput, type TextInputInstance, View } from "react-native";
 
 import { SymbolView } from "./AppSymbol";
+import { ControlPressable } from "./ControlPressable";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
 
 export interface SearchFieldProps {
@@ -56,7 +57,7 @@ export function SearchField({
         onChangeText={onChangeText}
       />
       {value.length > 0 ? (
-        <Pressable
+        <ControlPressable
           accessibilityLabel={clearAccessibilityLabel}
           accessibilityRole="button"
           hitSlop={10}
@@ -70,7 +71,7 @@ export function SearchField({
             size={mediumIconSize}
             tintColorClassName="accent-foreground-muted"
           />
-        </Pressable>
+        </ControlPressable>
       ) : null}
     </View>
   );

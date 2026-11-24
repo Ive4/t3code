@@ -44,6 +44,7 @@ import {
   workspaceUsesColumns,
 } from "./workspace-tabs-state";
 import { WorkspaceTabDock } from "./WorkspaceTabDock";
+import { WorkspaceTabTransition } from "./WorkspaceTabTransition";
 import {
   useCompactWorkspaceTabs,
   useSidebarWorkspaceTabs,
@@ -181,20 +182,22 @@ function WorkspaceRootContent() {
           }}
         />
         <SafeAreaInsetsContext value={compactTabs || harmony ? { ...insets, bottom: 0 } : insets}>
-          {/* Usage draws its own header, and skips its body itself. */}
-          {headerOnly && (settingsOpen || state.selectedTab !== "usage") ? null : settingsOpen ? (
-            <WorkspaceSettingsList />
-          ) : enabled.length === 0 ? (
-            <WorkspaceNoTabs />
-          ) : state.selectedTab === "threads" ? (
-            <HomeRouteScreen />
-          ) : state.selectedTab === "pullRequests" ? (
-            <PullRequestsScreen />
-          ) : state.selectedTab === "issues" ? (
-            <IssuesScreen />
-          ) : (
-            <WorkspaceExtraTab tab={state.selectedTab} />
-          )}
+          <WorkspaceTabTransition tab={settingsOpen ? "settings" : state.selectedTab}>
+            {/* Usage draws its own header, and skips its body itself. */}
+            {headerOnly && (settingsOpen || state.selectedTab !== "usage") ? null : settingsOpen ? (
+              <WorkspaceSettingsList />
+            ) : enabled.length === 0 ? (
+              <WorkspaceNoTabs />
+            ) : state.selectedTab === "threads" ? (
+              <HomeRouteScreen />
+            ) : state.selectedTab === "pullRequests" ? (
+              <PullRequestsScreen />
+            ) : state.selectedTab === "issues" ? (
+              <IssuesScreen />
+            ) : (
+              <WorkspaceExtraTab tab={state.selectedTab} />
+            )}
+          </WorkspaceTabTransition>
         </SafeAreaInsetsContext>
         {harmony ? (
           <WorkspaceTabDock placement="window" />
