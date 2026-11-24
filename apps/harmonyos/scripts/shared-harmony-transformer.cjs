@@ -21,6 +21,16 @@ module.exports = {
       );
     }
     if (
+      filename.includes("/react-native-keyboard-controller/") &&
+      /\/specs\/KeyboardControllerViewNativeComponent\.(?:ts|js)$/.test(filename)
+    ) {
+      const componentName = /(['"])KeyboardControllerView\1/;
+      if (!componentName.test(source)) {
+        throw new Error("The keyboard controller's native component name changed: " + filename);
+      }
+      source = source.replace(componentName, '"RNKeyboardControllerView"');
+    }
+    if (
       filename.includes("/react-native-gesture-handler/") &&
       filename.endsWith("/src/v3/detectors/common.ts")
     ) {
