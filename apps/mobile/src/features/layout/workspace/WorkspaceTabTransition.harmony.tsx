@@ -1,38 +1,29 @@
-import { useLayoutEffect, useRef, type PropsWithChildren } from "react";
+import type { PropsWithChildren } from "react";
 import Animated, {
   Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
+  FadeIn,
+  LayoutAnimationConfig,
+  ReduceMotion,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MOBILE_MOTION } from "../../../lib/designTokens";
 
+const TAB_ENTER = FadeIn.duration(MOBILE_MOTION.adjust)
+  .easing(Easing.out(Easing.cubic))
+  .withInitialValues({ opacity: 0.8 })
+  .reduceMotion(ReduceMotion.System);
+
 export function WorkspaceTabTransition({ children, tab }: PropsWithChildren<{ tab: string }>) {
-  const previousTab = useRef(tab);
-  const reduceMotion = useReducedMotion();
-  const opacity = useSharedValue(1);
   const { top } = useSafeAreaInsets();
   // These lists have no app bar to account for the status bar.
   const paddingTop = tab === "pullRequests" || tab === "issues" ? top : 0;
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- animates the native view when the selected tab changes
-  useLayoutEffect(() => {
-    if (previousTab.current === tab) return;
-    previousTab.current = tab;
-    if (reduceMotion) return;
-    opacity.set(0.85);
-    opacity.set(
-      withTiming(1, { duration: MOBILE_MOTION.adjust, easing: Easing.out(Easing.cubic) }),
-    );
-  }, [opacity, reduceMotion, tab]);
-
-  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   return (
-    <Animated.View className="flex-1" style={[{ paddingTop }, style]}>
-      {children}
-    </Animated.View>
+    <LayoutAnimationConfig skipEntering>
+      <Animated.View key={tab} entering={TAB_ENTER} className="flex-1" style={{ paddingTop }}>
+        {children}
+      </Animated.View>
+    </LayoutAnimationConfig>
   );
 }
