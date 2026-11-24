@@ -1,5 +1,5 @@
 const { createHash } = require("node:crypto");
-const { readFileSync, realpathSync, statSync } = require("node:fs");
+const { existsSync, readFileSync, realpathSync, statSync } = require("node:fs");
 const { copyFile, mkdir, mkdtemp, rmdir, unlink } = require("node:fs/promises");
 const { createRequire, registerHooks } = require("node:module");
 const { tmpdir } = require("node:os");
@@ -75,11 +75,9 @@ function getPaths() {
   if (!statSync(path.join(entryRoot, "module.json5")).isFile()) {
     throw new Error("Expected a Harmony native workspace with an entry module.");
   }
-  const runtimeRoot = realpathSync(
-    values["runtime-node-modules"] ?? path.join(frameworkRoot, "node_modules"),
-  );
+  const runtimePath = values["runtime-node-modules"] ?? path.join(frameworkRoot, "node_modules");
   const outDir = path.resolve(values["out-dir"] ?? path.join(entryRoot, "resources/rawfile"));
-  return { frameworkRoot, runtimeRoot, outDir };
+  return { frameworkRoot, runtimePath, outDir };
 }
 
 function loadFrameworkConfig(frameworkRoot) {
@@ -236,11 +234,19 @@ async function writeAssets(assets, assetsRoot) {
 async function bundle() {
   const paths = getPaths();
   if (!paths) return;
-  const { frameworkRoot, runtimeRoot, outDir } = paths;
+  const { frameworkRoot, runtimePath, outDir } = paths;
   const framework = manifest(frameworkRoot);
   if (framework.name !== frameworkPackage || framework.version !== frameworkVersion) {
     throw new Error("Shared Harmony bundles require " + frameworkPackage + "@" + frameworkVersion);
   }
+  if (!existsSync(path.join(frameworkRoot, "Libraries/Core/InitializeCore.js"))) {
+    throw new Error(
+      "RNOH source is missing upstream React Native files in " +
+        frameworkRoot +
+        ". Run `pnpm init-ws` in a fresh RNOH checkout before using its JavaScript package.",
+    );
+  }
+  const runtimeRoot = realpathSync(runtimePath);
   for (const name of runtimePackages) {
     const runtime = manifest(path.join(runtimeRoot, name));
     if (runtime.name !== name || runtime.version !== framework.dependencies[name]) {

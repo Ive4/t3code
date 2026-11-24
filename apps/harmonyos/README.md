@@ -28,7 +28,9 @@ The checked-in device build uses the precompiled ARM64 HAR.
 
 The shared build bundles the same `apps/mobile/index.ts` entry used by Android.
 Prepare the [RNOH 0.88 native host](shared-native/README.md) and use the matching
-RNOH JavaScript package from that checkout.
+RNOH JavaScript package. When starting from source, run `pnpm init-ws` in a
+fresh RNOH checkout to integrate the upstream React Native files. Pass its
+`packages/react-native-harmony` directory as `--framework`.
 
 ```sh
 node apps/harmonyos/scripts/bundle-shared.cjs --framework <rnoh-js-package> --native-workspace <candidate-directory>
