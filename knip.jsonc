@@ -117,12 +117,19 @@
     },
     "apps/harmonyos": {
       // DevEco Studio loads the Hvigor files and supplies their native plugins.
-      "ignore": ["hvigorfile.ts", "entry/hvigorfile.ts"],
+      "ignore": [
+        "hvigorfile.ts",
+        "entry/hvigorfile.ts",
+        "arkts/hvigorfile.ts",
+        "arkts/entry/hvigorfile.ts",
+      ],
       // The native preparation CLI and Metro's shared entry, transformer, and aliases are loaded by path.
       "entry": [
+        "scripts/configure-arkts-cloud.cjs",
         "scripts/prepare-shared-native.cjs",
         "scripts/shared-harmony-transformer.cjs",
         "src/shared/index.js",
+        "src/shared/terminal/page.js",
         "src/shared/ports/*.harmony.js",
       ],
     },

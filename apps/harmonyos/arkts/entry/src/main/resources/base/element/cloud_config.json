@@ -1,0 +1,7 @@
+{
+  "string": [
+    { "name": "clerk_publishable_key", "value": "" },
+    { "name": "clerk_jwt_template", "value": "" },
+    { "name": "relay_url", "value": "" }
+  ]
+}

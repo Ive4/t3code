@@ -1,0 +1,42 @@
+{
+  module: {
+    name: "entry",
+    type: "entry",
+    mainElement: "EntryAbility",
+    deviceTypes: ["phone"],
+    deliveryWithInstall: true,
+    installationFree: false,
+    pages: "$profile:main_pages",
+    requestPermissions: [{ name: "ohos.permission.INTERNET" }],
+    abilities: [
+      {
+        name: "EntryAbility",
+        srcEntry: "./ets/entryability/EntryAbility.ets",
+        label: "$string:app_name",
+        icon: "$media:app_icon",
+        startWindowIcon: "$media:app_icon",
+        startWindowBackground: "$color:start_window_background",
+        exported: true,
+        skills: [
+          {
+            entities: ["entity.system.home"],
+            actions: ["ohos.want.action.home"],
+          },
+          {
+            entities: ["entity.system.browsable"],
+            actions: ["ohos.want.action.viewData"],
+            uris: [
+              { scheme: "clerk", host: "com.t3tools.t3code.dev.hosted-callback" },
+              { scheme: "t3code", host: "pair" },
+              { scheme: "t3code-dev", host: "pair" },
+              { scheme: "t3code-preview", host: "pair" },
+              { scheme: "t3code", host: "threads" },
+              { scheme: "t3code-dev", host: "threads" },
+              { scheme: "t3code-preview", host: "threads" },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+}
