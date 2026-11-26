@@ -1,23 +1,30 @@
 import type { ListItem, Root, RootContent } from "mdast";
 import { Fragment, useMemo, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View, type TextStyle } from "react-native";
+import { useAppearancePreferences } from "../features/settings/appearance/AppearancePreferencesProvider";
 import { ENRICHED_INLINE_FILE_LINK_REGEX } from "../lib/enrichedLinkPresentation";
 import {
   markdownWithFileEmbeds,
   markdownWithInlineFileLinks,
-  parseMarkdownDocument,
+  parseMarkdownDocumentWithSource,
 } from "../lib/markdownDocument";
+import { HarmonyMarkdownCodeBlock } from "./HarmonyMarkdownCodeBlock";
+import { HarmonyMarkdownMath } from "./HarmonyMarkdownMath";
+import { harmonyFenceIsClosed } from "./harmonyCodeBlock";
+import { harmonyStandaloneMath } from "./harmonyMathDocument";
 import type { SelectableMarkdownTextProps } from "./SelectableMarkdownText.types";
 
 function prepareDocument(
   markdown: string,
   fileEmbedLabel: SelectableMarkdownTextProps["fileEmbedLabel"],
+  mathRenderingEnabled: boolean,
 ) {
   const content = markdownWithInlineFileLinks(markdown, ENRICHED_INLINE_FILE_LINK_REGEX);
   const files = fileEmbedLabel ? markdownWithFileEmbeds(content, fileEmbedLabel) : undefined;
-  const root = parseMarkdownDocument(files?.markdown ?? content);
+  const { root, source } = parseMarkdownDocumentWithSource(files?.markdown ?? content);
   const links = new Map<string, string>();
   const tasks = new Map<ListItem, number>();
+  const math = new Map<RootContent, string>();
   function visit(node: Root | RootContent) {
     if (node.type === "definition" && !links.has(node.identifier)) {
       links.set(node.identifier, node.url);
@@ -25,16 +32,31 @@ function prepareDocument(
     if (node.type === "listItem" && typeof node.checked === "boolean") {
       tasks.set(node, tasks.size);
     }
+    // Each display formula mounts an ArkWeb view.
+    if (mathRenderingEnabled && math.size < 8) {
+      if (node.type === "code" && node.lang === "math" && harmonyFenceIsClosed(source, node)) {
+        math.set(node, node.value);
+      }
+      if (node.type === "paragraph") {
+        const start = node.position?.start.offset;
+        const end = node.position?.end.offset;
+        if (start !== undefined && end !== undefined && source.startsWith("$$", start)) {
+          const tex = harmonyStandaloneMath(source.slice(start, end));
+          if (tex) math.set(node, tex);
+        }
+      }
+    }
     if ("children" in node) node.children.forEach(visit);
   }
   visit(root);
-  return { root, links, tasks, fileHrefs: files?.fileHrefs };
+  return { root, source, links, tasks, math, fileHrefs: files?.fileHrefs };
 }
 
 export function MobileEnrichedMarkdownText(props: SelectableMarkdownTextProps) {
-  const { root, links, tasks, fileHrefs } = useMemo(
-    () => prepareDocument(props.markdown, props.fileEmbedLabel),
-    [props.markdown, props.fileEmbedLabel],
+  const { mathRenderingEnabled } = useAppearancePreferences();
+  const { root, source, links, tasks, math, fileHrefs } = useMemo(
+    () => prepareDocument(props.markdown, props.fileEmbedLabel, mathRenderingEnabled),
+    [props.markdown, props.fileEmbedLabel, mathRenderingEnabled],
   );
   const theme = props.textStyle;
   const body: TextStyle = {
@@ -100,6 +122,21 @@ export function MobileEnrichedMarkdownText(props: SelectableMarkdownTextProps) {
   function block(node: RootContent): ReactNode {
     switch (node.type) {
       case "paragraph": {
+        const tex = math.get(node);
+        if (tex) {
+          const authored = source.slice(node.position?.start.offset, node.position?.end.offset);
+          return (
+            <HarmonyMarkdownMath
+              tex={tex}
+              textStyle={theme}
+              fallback={
+                <Text selectable style={body}>
+                  {authored}
+                </Text>
+              }
+            />
+          );
+        }
         const image = node.children.length === 1 ? node.children[0] : undefined;
         if (image?.type === "image" || image?.type === "imageReference") {
           const href = image.type === "image" ? image.url : links.get(image.identifier);
@@ -141,14 +178,13 @@ export function MobileEnrichedMarkdownText(props: SelectableMarkdownTextProps) {
       }
       case "code":
         return (
-          <ScrollView
-            horizontal
-            style={[styles.code, { backgroundColor: theme.codeBlockBackgroundColor }]}
-          >
-            <Text selectable style={[body, styles.monospace, { color: theme.codeColor }]}>
-              {node.value}
-            </Text>
-          </ScrollView>
+          <HarmonyMarkdownCodeBlock
+            code={node.value}
+            language={node.lang ?? ""}
+            complete={harmonyFenceIsClosed(source, node)}
+            renderMath={math.has(node)}
+            textStyle={theme}
+          />
         );
       case "blockquote":
         return (
@@ -266,7 +302,6 @@ const styles = StyleSheet.create({
   emphasis: { fontStyle: "italic" },
   strike: { textDecorationLine: "line-through" },
   monospace: { fontFamily: "monospace" },
-  code: { borderRadius: 8, padding: 12 },
   quote: { borderStartWidth: 2, paddingStart: 12 },
   tableRow: { borderBottomWidth: StyleSheet.hairlineWidth },
   tableCell: { width: 160, padding: 8 },

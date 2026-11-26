@@ -21,6 +21,8 @@ const harness = vi.hoisted(() => ({
   refreshAssetUrl:
     vi.fn<(environmentId: string, resource: { url: string }) => Promise<string | null>>(),
   alert: vi.fn(),
+  open: vi.fn(),
+  inlinePdf: vi.fn<() => boolean>().mockReturnValue(false),
   share: vi.fn<typeof downloadAndShareAttachment>(),
   download: vi.fn<typeof downloadAttachmentForPreview>(),
   previews: [] as unknown[],
@@ -38,6 +40,7 @@ vi.mock("../../lib/attachmentDownload", () => ({
   downloadAndShareAttachment: harness.share,
   downloadAttachmentForPreview: harness.download,
   nativeViewerErrorMessage: () => "",
+  openAttachmentInViewer: harness.open,
   shareLocalAttachment: vi.fn(),
 }));
 vi.mock("../../lib/previewPresentation", () => ({ usePreviewPresentation: () => {} }));
@@ -45,7 +48,12 @@ vi.mock("./Dialog", () => ({ alert: harness.alert }));
 vi.mock("./Button", () => ({ Button: () => null }));
 vi.mock("./SheetHeader", () => ({ SheetHeader: () => null }));
 vi.mock("./AppText", () => ({ AppText: () => null }));
-vi.mock("../PdfPreview", () => ({ PdfPreview: () => null }));
+vi.mock("../PdfPreview", () => ({
+  PdfPreview: ({ uri }: { uri: string }) => <output data-pdf={uri} />,
+}));
+vi.mock("../../lib/nativeFileActions.harmony", () => ({
+  isInlinePdfAvailable: harness.inlinePdf,
+}));
 vi.mock("../MediaPreviewHeader", () => ({
   MediaPreviewHeader: ({ media }: { media: ReturnType<typeof useMediaActions> }) =>
     media.actions
@@ -76,7 +84,7 @@ vi.mock("expo", () => ({ requireNativeModule: vi.fn() }));
 vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
 vi.mock("expo-haptics", () => ({ notificationAsync: vi.fn() }));
 vi.mock("react-native", () => ({
-  Modal: () => null,
+  Modal: ({ children }: { children: ReactNode }) => children,
   Platform: { OS: "android", Version: 35 },
   View: ({ children }: { children: ReactNode }) => children,
 }));
@@ -108,6 +116,7 @@ vi.mock("react-native-image-viewing", () => ({
 }));
 
 import { FilePreviewModal as AndroidFilePreviewModal } from "./FilePreviewModal.android";
+import { FilePreviewModal as HarmonyFilePreviewModal } from "./FilePreviewModal.harmony";
 import type { FilePreviewItem, FilePreviewViewerProps } from "./FilePreviewModal.types";
 import { FilePreviewSession } from "./FilePreviewSession";
 
@@ -131,6 +140,7 @@ async function openGallery(
   selected: FilePreviewItem,
   gallery: readonly FilePreviewItem[],
   progressiveGallery: boolean,
+  Modal = AndroidFilePreviewModal,
 ) {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   harness.previews.length = 0;
@@ -150,7 +160,7 @@ async function openGallery(
           Viewer={Viewer}
         />
       ) : (
-        <AndroidFilePreviewModal source={source} onRequestClose={onRequestClose} />
+        <Modal source={source} onRequestClose={onRequestClose} />
       ),
     ),
   );
@@ -418,4 +428,51 @@ it("does not carry a presented viewer over to a different item that is still res
   expect(
     harness.refreshAssetUrl.mock.calls.filter(([, r]) => r.url.endsWith("b.pdf")),
   ).toHaveLength(1);
+});
+
+it("refreshes the PDF URL when sharing after a HarmonyOS viewer failure", async () => {
+  harness.refreshAssetUrl
+    .mockResolvedValueOnce("https://assets.test/expired.pdf")
+    .mockResolvedValueOnce("https://assets.test/refreshed.pdf");
+  harness.open.mockRejectedValueOnce(new Error("The file cannot be previewed."));
+  harness.share.mockResolvedValueOnce(undefined);
+  const pdf: FilePreviewItem = {
+    ...image("https://assets.test/report.pdf"),
+    kind: "pdf",
+    name: "report.pdf",
+  };
+  await using preview = await openGallery(pdf, [pdf], false, HarmonyFilePreviewModal);
+  expect(harness.refreshAssetUrl).toHaveBeenCalled();
+  expect(harness.open).toHaveBeenCalledWith(
+    expect.objectContaining({ uri: "https://assets.test/expired.pdf" }),
+  );
+  expect(preview.onRequestClose).toHaveBeenCalledOnce();
+  const share = harness.alert.mock.calls[0]?.[2]?.find(
+    (button: { text: string }) => button.text === "Save or share",
+  );
+  await act(async () => share.onPress());
+  expect(harness.share).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      url: "https://assets.test/refreshed.pdf",
+      attachment: { name: "report.pdf", mimeType: "application/pdf" },
+    }),
+  );
+});
+
+it("uses the app-owned HarmonyOS PDF viewer with a freshly signed source and its page fragment", async () => {
+  harness.inlinePdf.mockReturnValueOnce(true);
+  harness.open.mockReset().mockResolvedValue(undefined);
+  harness.refreshAssetUrl.mockResolvedValueOnce("https://assets.test/signed.pdf?token=current");
+  const pdf: FilePreviewItem = {
+    ...image("https://assets.test/report.pdf"),
+    kind: "pdf",
+    name: "report.pdf",
+    srcFragment: "#page=2",
+  };
+  await using preview = await openGallery(pdf, [pdf], false, HarmonyFilePreviewModal);
+  expect(preview.container.querySelector("output")?.dataset.pdf).toBe(
+    "https://assets.test/signed.pdf?token=current#page=2",
+  );
+  expect(harness.open).not.toHaveBeenCalled();
+  expect(preview.onRequestClose).not.toHaveBeenCalled();
 });

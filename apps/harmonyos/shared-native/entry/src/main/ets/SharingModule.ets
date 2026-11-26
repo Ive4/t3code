@@ -12,11 +12,18 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_HANDOFF_BYTES = 100 * 1024 * 1024;
 const MAX_HANDOFFS = 4;
 
+interface ShareStagingIssue {
+  maxBytes?: number;
+}
+
+class ShareFileLimitError extends Error {}
+
 interface SharePayload {
   value: string;
   shareType: string;
   mimeType: string;
   originalName: string | null;
+  stagingIssue?: ShareStagingIssue;
 }
 
 interface ResolvedSharePayload extends SharePayload {
@@ -65,9 +72,8 @@ async function copySharedFile(uri: string, path: string, maxBytes: number): Prom
   const source = await fs.open(uri, fs.OpenMode.READ_ONLY | fs.OpenMode.NONBLOCK);
   try {
     const info = await fs.stat(source.fd);
-    if (!info.isFile() || info.size > maxBytes) {
-      throw new Error('Shared item exceeds the file limit or cannot be opened as a file.');
-    }
+    if (!info.isFile()) throw new Error('Shared item cannot be opened as a file.');
+    if (info.size > maxBytes) throw new ShareFileLimitError();
     const destination = await fs.open(path, fs.OpenMode.WRITE_ONLY | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
     try {
       const buffer = new ArrayBuffer(64 * 1024);
@@ -75,7 +81,7 @@ async function copySharedFile(uri: string, path: string, maxBytes: number): Prom
       while (true) {
         const count = await fs.read(source.fd, buffer, { length: Math.min(buffer.byteLength, maxBytes - size + 1) });
         if (count === 0) return size;
-        if (count > maxBytes - size) throw new Error('Shared file exceeds the file limit.');
+        if (count > maxBytes - size) throw new ShareFileLimitError();
         const written = await fs.write(destination.fd, buffer, { length: count });
         if (written !== count) throw new Error('Unable to write the complete shared file.');
         size += count;
@@ -109,11 +115,31 @@ function releaseStaging(directory: string | null): void {
   });
 }
 
+function failedFile(name: string | null, stagingIssue: ShareStagingIssue): ResolvedSharePayload {
+  return {
+    value: '',
+    shareType: 'file',
+    mimeType: 'application/octet-stream',
+    originalName: name,
+    stagingIssue,
+    contentUri: null,
+    contentType: 'file',
+    contentMimeType: null,
+    contentSize: null,
+  };
+}
+
 async function stageWant(want: Want, cacheDir: string): Promise<void> {
   const owner = fileAuthority(fileUri.getUriFromPath(cacheDir));
   const share: IncomingShare = { payloads: [], directory: null };
+  let records: systemShare.SharedRecord[] = [];
+  try {
+    records = await recordsFromWant(want);
+  } catch {
+    share.payloads.push(failedFile(null, {}));
+  }
   let stagedBytes = 0;
-  for (const record of await recordsFromWant(want)) {
+  for (const record of records) {
     const content = record.content ?? '';
     if (content && (record.utd === utd.UniformDataType.HYPERLINK || record.utd === utd.UniformDataType.PLAIN_TEXT || record.utd === utd.UniformDataType.TEXT)) {
       const hyperlink = record.utd === utd.UniformDataType.HYPERLINK;
@@ -132,14 +158,19 @@ async function stageWant(want: Want, cacheDir: string): Promise<void> {
 
     const uri = record.uri;
     const source = uri ? fileAuthority(uri) : undefined;
-    if (!uri || !owner || !source || source.toLowerCase() === owner.toLowerCase()) continue;
+    if (!uri || !owner || !source || source.toLowerCase() === owner.toLowerCase()) {
+      share.payloads.push(failedFile(null, {}));
+      continue;
+    }
     let path: string | undefined;
+    let name: string | null = null;
+    let maxBytes = 0;
     try {
-      const name = new fileUri.FileUri(uri).name.split(/[\/\\]/).pop() || 'attachment';
+      name = new fileUri.FileUri(uri).name.split(/[\/\\]/).pop() || 'attachment';
       const mimeType = mimeTypeFor(record.utd, name);
       const shareType = classifiedFileType(mimeType);
-      const maxBytes = Math.min(shareType === 'image' ? MAX_IMAGE_BYTES : MAX_FILE_BYTES, MAX_HANDOFF_BYTES - stagedBytes);
-      if (maxBytes <= 0) throw new Error('Incoming share exceeds the file limit.');
+      maxBytes = Math.min(shareType === 'image' ? MAX_IMAGE_BYTES : MAX_FILE_BYTES, MAX_HANDOFF_BYTES - stagedBytes);
+      if (maxBytes <= 0) throw new ShareFileLimitError();
       share.directory ??= await fs.mkdtemp(cacheDir + '/t3-incoming-share-XXXXXX');
       path = share.directory + '/' + share.payloads.length;
       const size = await copySharedFile(uri, path, maxBytes);
@@ -156,9 +187,9 @@ async function stageWant(want: Want, cacheDir: string): Promise<void> {
         contentMimeType: mimeType,
         contentSize: size,
       });
-    } catch {
+    } catch (error) {
       if (path) await fs.unlink(path).catch(() => {});
-      console.warn('[t3-sharing] Could not stage a shared file.');
+      share.payloads.push(failedFile(name, error instanceof ShareFileLimitError ? { maxBytes } : {}));
     }
   }
   if (share.payloads.length === 0) {
@@ -186,7 +217,7 @@ export function captureIncomingShare(want: Want, context: common.UIAbilityContex
   return true;
 }
 
-async function sandboxFilePath(uri: string, context: common.UIAbilityContext): Promise<string> {
+export async function sandboxFilePath(uri: string, context: common.UIAbilityContext): Promise<string> {
   const encodedPath = /^file:\/\/\/([^?#]+)$/.exec(uri)?.[1];
   if (!encodedPath) throw new Error('Only local sandbox file URLs can be shared.');
   const parts = encodedPath.split('/').map((part: string) => decodeURIComponent(part));
@@ -270,6 +301,7 @@ export class SharingModule extends UITurboModule {
       shareType: payload.shareType,
       mimeType: payload.mimeType,
       originalName: payload.originalName,
+      stagingIssue: payload.stagingIssue,
     }));
   }
 

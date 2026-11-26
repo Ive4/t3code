@@ -165,7 +165,7 @@ export function T3ConnectProfilePage() {
     >
       <ClerkSectionHeader>{gt("Registered servers")}</ClerkSectionHeader>
 
-      {environmentsState.error ? (
+      {environmentsState.error && !environmentsState.isPending ? (
         <>
           <ClerkRow
             title={gt("Could not load {product} environments", { product: "T3 Connect" })}
@@ -179,8 +179,9 @@ export function T3ConnectProfilePage() {
               }}
             />
           ) : null}
+          <ClerkButtonRow label={gt("Try again")} onPress={environmentsState.refresh} />
         </>
-      ) : isInitialLoad ? (
+      ) : isInitialLoad || (environmentsState.isPending && environmentsState.data === null) ? (
         <View className="flex-row items-center gap-3 px-6 py-4">
           <AppActivityIndicator colorClassName={"accent-clerk-foreground-muted"} size="small" />
           <Text className="text-base text-clerk-foreground-muted">

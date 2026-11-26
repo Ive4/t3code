@@ -1,4 +1,4 @@
-import { expect, it } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 
 import { buildFileTree, flattenFileTree } from "./fileTree";
 
@@ -58,4 +58,33 @@ it("prunes unmatched subtrees without losing adjacent rows or their depths", () 
     "root",
     "tail.txt",
   ]);
+});
+
+it("sorts directory and numeric file names when the runtime has no Intl.Collator", async () => {
+  const withoutCollator = Object.create(Intl);
+  Object.defineProperty(withoutCollator, "Collator", { value: undefined });
+  vi.stubGlobal("Intl", withoutCollator);
+  try {
+    vi.resetModules();
+    const { buildFileTree } = await import("./fileTree");
+    expect(
+      buildFileTree([
+        { kind: "file", path: "entry10.txt" },
+        { kind: "file", path: "Entry2.txt" },
+        { kind: "directory", path: "src" },
+        { kind: "file", path: "entry1.txt" },
+        { kind: "file", path: "entry9999999999999999999.txt" },
+        { kind: "file", path: "entry10000000000000000000.txt" },
+      ]).map(({ name }) => name),
+    ).toEqual([
+      "src",
+      "entry1.txt",
+      "Entry2.txt",
+      "entry10.txt",
+      "entry9999999999999999999.txt",
+      "entry10000000000000000000.txt",
+    ]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

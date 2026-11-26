@@ -6,6 +6,7 @@ import { Platform, View, type PressableProps, type StyleProp, type ViewStyle } f
 import type { useMediaActions } from "../state/mediaActions";
 import { SymbolView } from "./ui/AppSymbol";
 import { Menu } from "./ui/Menu";
+import { useModalOverlayScope } from "./ui/OverlayPortal";
 
 export function MediaActionsMenu(props: {
   readonly media: ReturnType<typeof useMediaActions>;
@@ -14,9 +15,10 @@ export function MediaActionsMenu(props: {
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const gt = useGT();
+  const hasModalOverlay = useModalOverlayScope();
   if (props.media.actions.length === 0) return props.children ?? null;
   // Android's normal anchored menu lives in the app-root portal, behind native modals.
-  const nativeAndroidMenu = props.inModal && Platform.OS === "android";
+  const nativeAndroidMenu = props.inModal && !hasModalOverlay && Platform.OS === "android";
   const MediaMenu = nativeAndroidMenu ? MenuView : Menu;
   return (
     <MediaMenu

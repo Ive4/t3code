@@ -103,6 +103,7 @@ export function useConnectionController() {
     relayEnvironments,
     availableRelayEnvironments,
     relayDiscovery: {
+      hasListed: discovery.listed,
       isRefreshing: discovery.refreshing,
       isOffline: discovery.offline,
       error: errorDisplayMessage(Option.getOrNull(discovery.error), messages),

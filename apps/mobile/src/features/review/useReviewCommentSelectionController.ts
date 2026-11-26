@@ -83,18 +83,8 @@ export function useReviewCommentSelectionController(input: {
       ? { title: gt("Select range end"), onOpenComment: null }
       : null;
 
-  const onPressLine = (
-    event: NativeSyntheticEvent<{
-      readonly rowId?: string;
-      readonly gesture?: "tap" | "longPress";
-    }>,
-  ) => {
-    if (!selectedSection || scope === null) {
-      return;
-    }
-
-    const { rowId, gesture } = event.nativeEvent;
-    if (!rowId) {
+  const pressLine = (rowId?: string, gesture?: "tap" | "longPress") => {
+    if (!selectedSection || scope === null || !rowId) {
       return;
     }
 
@@ -134,8 +124,16 @@ export function useReviewCommentSelectionController(input: {
     openReviewCommentSheet();
   };
 
+  const onPressLine = (
+    event: NativeSyntheticEvent<{
+      readonly rowId?: string;
+      readonly gesture?: "tap" | "longPress";
+    }>,
+  ) => pressLine(event.nativeEvent.rowId, event.nativeEvent.gesture);
+
   return {
     selectedRowIds,
+    pressLine,
     selectionAction,
     onPressLine,
     clearSelection: clearReviewCommentTarget,

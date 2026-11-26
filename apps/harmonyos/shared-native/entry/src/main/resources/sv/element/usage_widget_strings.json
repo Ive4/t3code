@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "Kvar av prenumerationen"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "Öppna T3 för att uppdatera"
+    }
+  ]
+}

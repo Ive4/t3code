@@ -68,6 +68,7 @@ function usage() {
   console.log(
     "Usage: node apps/harmonyos/scripts/prepare-shared-native.cjs --vendor-root <path> --out <path> [--abi arm64-v8a|x86_64]",
   );
+  console.log("Set T3CODE_HUAWEI_ACCOUNT_CLIENT_ID to enable Account Kit.");
 }
 
 function canonical(path) {
@@ -254,6 +255,10 @@ function main() {
     return;
   }
   const { out, abi } = values;
+  const huaweiClientId = process.env.T3CODE_HUAWEI_ACCOUNT_CLIENT_ID?.trim();
+  if (huaweiClientId && !/^[A-Za-z0-9_.-]+$/.test(huaweiClientId)) {
+    throw new Error("Invalid T3CODE_HUAWEI_ACCOUNT_CLIENT_ID");
+  }
   if (!out || !values["vendor-root"] || !["arm64-v8a", "x86_64"].includes(abi)) {
     usage();
     throw new Error("Supply the vendor root, candidate path, and a supported ABI");
@@ -287,6 +292,20 @@ function main() {
     cpSync(join(harmony, file), join(output, file), { recursive: true });
   }
   cpSync(join(snapshot, "entry"), join(output, "entry"), { recursive: true });
+  if (huaweiClientId) {
+    const path = join(output, "entry/src/main/module.json5");
+    const metadata = [{ name: "client_id", value: huaweiClientId }];
+    const manifest = readFileSync(path, "utf8");
+    const moduleDeclaration = "  module: {\n";
+    if (!manifest.includes(moduleDeclaration)) throw new Error("Entry module declaration missing");
+    writeFileSync(
+      path,
+      manifest.replace(
+        moduleDeclaration,
+        `${moduleDeclaration}    metadata: ${JSON.stringify(metadata)},\n`,
+      ),
+    );
+  }
   writeProjectFiles(output, abi);
   writeJson(markerPath, { version: 1, vendor, abi, ready: true });
   console.log(output);

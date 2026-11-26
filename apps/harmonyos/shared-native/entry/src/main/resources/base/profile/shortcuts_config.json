@@ -1,0 +1,30 @@
+{
+  "shortcuts": [
+    {
+      "shortcutId": "new-task",
+      "label": "$string:shortcut_new_task",
+      "icon": "$media:app_icon",
+      "wants": [
+        {
+          "bundleName": "com.t3tools.t3code.dev",
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": { "t3LauncherShortcut": "new" }
+        }
+      ]
+    },
+    {
+      "shortcutId": "pair-environment",
+      "label": "$string:shortcut_pair_environment",
+      "icon": "$media:app_icon",
+      "wants": [
+        {
+          "bundleName": "com.t3tools.t3code.dev",
+          "moduleName": "entry",
+          "abilityName": "EntryAbility",
+          "parameters": { "t3LauncherShortcut": "pair" }
+        }
+      ]
+    }
+  ]
+}

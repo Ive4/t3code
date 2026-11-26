@@ -17,6 +17,7 @@ import {
   registerHiddenUpdateTap,
   runAppUpdateCheck,
 } from "../updates/app-updates";
+import { useStoreAppUpdateClient } from "../updates/store-app-updates";
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsScreen } from "./components/SettingsScreen";
@@ -53,7 +54,7 @@ function AppSettingsSection() {
   const updateInFlight = useRef(false);
   const hiddenUpdateTapCount = useRef(0);
 
-  const version = Constants.expoConfig?.version ?? "0.0.0";
+  const version = Constants.expoConfig?.version ?? Application.nativeApplicationVersion ?? "0.0.0";
   // Match app.config.ts's production fallback to avoid mislabeling builds as development.
   const variant = (Constants.expoConfig?.extra?.appVariant as string | undefined) ?? "production";
   const variantLabel = variant === "production" ? "" : capitalize(variant);
@@ -61,7 +62,8 @@ function AppSettingsSection() {
   const build = Application.nativeBuildVersion;
   const versionWithBuild = build ? `${version} (${build})` : version;
   const versionLabel = variantLabel ? `${versionWithBuild} · ${variantLabel}` : versionWithBuild;
-  const updateCheckAvailable = isAppUpdateCheckAvailable();
+  const storeClient = useStoreAppUpdateClient();
+  const updateCheckAvailable = storeClient !== null || isAppUpdateCheckAvailable();
   const busy =
     updateState === "checking" || updateState === "downloading" || updateState === "restarting";
 
@@ -73,6 +75,7 @@ function AppSettingsSection() {
     await settlePromise(() =>
       runAppUpdateCheck({
         applyMode: "immediate",
+        ...(storeClient && { storeClient }),
         onFailure: (message) => Dialog.alert(gt("Update failed"), message),
         onStateChange: (state) =>
           setCheckState({

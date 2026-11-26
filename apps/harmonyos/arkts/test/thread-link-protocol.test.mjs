@@ -7,7 +7,8 @@ const source = new URL("../entry/src/main/ets/", import.meta.url);
 const kits = {
   "@kit.AbilityKit":
     "export class UIAbility { context = { config: {} }; } export const Want = {}; export const ConfigurationConstant = { ColorMode: { COLOR_MODE_DARK: 0 } };",
-  "@kit.ArkUI": "export const window = {};",
+  "@kit.ArkUI":
+    "export const window = {}; export const ColorMetrics = { resourceColor: color => color };",
   "@kit.PerformanceAnalysisKit": "export const hilog = {};",
 };
 const loader = NodeModule.registerHooks({

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { act, createElement, createContext, useState, type ReactNode } from "react";
+import { act, createElement, createContext, use, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { WorkspaceRootScreen } from "./WorkspaceRootScreen.android";
+import { WorkspaceRootScreen as HarmonyWorkspaceRootScreen } from "./WorkspaceRootScreen";
+import { WorkspaceTabsContext } from "./WorkspaceTabsContext";
+import type { AppBarProps } from "../../../components/ui/AppBar.types";
 import {
   initialWorkspaceTabsState,
   workspaceTabsReducer,
@@ -205,6 +208,8 @@ describe("workspace root navigation", () => {
 const mocks = vi.hoisted(() => ({
   split: false,
   floating: false,
+  platform: "android",
+  route: "Home",
   state: undefined as WorkspaceTabsState | undefined,
   openWorkspaceTab: (_tab: string) => {},
   backListeners: new Set<() => boolean>(),
@@ -214,16 +219,29 @@ vi.mock("../../settings/appearance/AppearancePreferencesProvider", () => ({
   useAndroidFloatingTabs: () => mocks.floating,
 }));
 vi.mock("react-native", () => ({
+  Platform: {
+    get OS() {
+      return mocks.platform;
+    },
+  },
   BackHandler: {
     addEventListener: (_event: string, listener: () => boolean) => {
       mocks.backListeners.add(listener);
       return { remove: () => mocks.backListeners.delete(listener) };
     },
   },
-  Keyboard: { dismiss: () => undefined },
+  Keyboard: { dismiss: () => undefined, isVisible: () => false },
   useWindowDimensions: () => ({ width: 400, height: 800 }),
   View: ({ children }: { children: ReactNode }) => createElement("div", null, children),
+  Pressable: ({
+    children,
+    accessibilityLabel,
+  }: {
+    children: ReactNode;
+    accessibilityLabel: string;
+  }) => createElement("button", { "aria-label": accessibilityLabel }, children),
 }));
+vi.mock("react-native-keyboard-controller", () => ({ useKeyboardState: () => 0 }));
 vi.mock("react-native-safe-area-context", () => ({
   SafeAreaInsetsContext: createContext({ top: 0, right: 0, bottom: 24, left: 0 }),
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 24, left: 0 }),
@@ -234,17 +252,33 @@ vi.mock("../AdaptiveWorkspaceLayout", () => ({
     startNewTask: () => undefined,
   }),
 }));
-vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
+vi.mock("@react-navigation/native", () => ({
+  useIsFocused: () => mocks.route === "Home",
+  useNavigation: () => ({ getState: () => ({ routes: [{ name: mocks.route }], index: 0 }) }),
+}));
 vi.mock("../adaptive-workspace-context", () => ({
-  useAdaptiveWorkspaceLayout: () => ({ openWorkspaceTab: mocks.openWorkspaceTab }),
+  useAdaptiveWorkspaceLayout: () => ({
+    layout: { usesSplitView: mocks.split },
+    openWorkspaceTab: mocks.openWorkspaceTab,
+  }),
 }));
 vi.mock("./navigation-tabs", () => ({
   useEnabledNavigationTabs: () => ["threads", "pullRequests", "usage"],
+  WORKSPACE_TAB_LABELS: {
+    threads: "Threads",
+    pullRequests: "Pulls",
+    issues: "Issues",
+    usage: "Usage",
+  },
 }));
-vi.mock("./WorkspaceTabsContext", () => ({
-  WorkspaceTabsContext: createContext(null),
-  useWorkspaceTabs: () => ({ state: mocks.state, dispatch: () => undefined }),
-}));
+vi.mock("./WorkspaceTabsContext", () => {
+  const WorkspaceTabsContext = createContext(null);
+  return {
+    WorkspaceTabsContext,
+    useWorkspaceTabs: () =>
+      use(WorkspaceTabsContext) ?? { state: mocks.state, dispatch: () => undefined },
+  };
+});
 vi.mock("./WorkspaceExtraTab", () => ({
   WorkspaceExtraTab: function UsageProbe() {
     const [tab, setTab] = useState("Limits");
@@ -252,7 +286,55 @@ vi.mock("./WorkspaceExtraTab", () => ({
   },
 }));
 vi.mock("../../../native/StackHeader", () => ({ NativeStackScreenOptions: () => null }));
-vi.mock("../../../components/ui/AppBar", () => ({ AppBar: () => null }));
+vi.mock("../../../components/ui/AppBar", () => ({
+  AppBar: ({ search, titleContent }: AppBarProps) =>
+    search?.active
+      ? createElement(
+          "div",
+          null,
+          createElement("input", {
+            "aria-label": search.placeholder,
+            readOnly: true,
+            value: search.value,
+          }),
+          createElement("button", { onClick: search.onClose }, "Close search"),
+        )
+      : createElement(
+          "div",
+          null,
+          titleContent,
+          search && createElement("button", { onClick: search.onOpen }, search.placeholder),
+        ),
+}));
+vi.mock("../../../components/ui/AppText", () => ({
+  AppText: ({ children }: { children: ReactNode }) => createElement("span", null, children),
+}));
+vi.mock("../../../components/ui/AppSymbol", () => ({ SymbolView: () => null }));
+vi.mock("../../../components/ui/Menu", () => ({
+  Menu: ({
+    actions,
+    onPressAction,
+    children,
+  }: import("../../../components/ui/Menu.types").MenuProps) => {
+    const [open, setOpen] = useState(false);
+    return createElement(
+      "div",
+      null,
+      createElement("div", { onClick: () => setOpen(!open) }, children),
+      open &&
+        actions.map(({ id, title }) =>
+          createElement(
+            "button",
+            {
+              key: id,
+              onClick: () => onPressAction?.({ nativeEvent: { event: id ?? "" } }),
+            },
+            title,
+          ),
+        ),
+    );
+  },
+}));
 vi.mock("../WorkspaceEmptyDetail", () => ({ WorkspaceEmptyDetail: () => null }));
 vi.mock("../../../components/ui/ScreenContent", () => ({
   ScreenContent: ({ children }: { children: ReactNode }) => createElement("div", null, children),
@@ -265,9 +347,20 @@ vi.mock("../../pull-requests/PullRequestFilterMenuContext", () => ({
   PullRequestFilterMenuProvider: ({ children }: { children: ReactNode }) =>
     createElement("div", null, children),
 }));
-vi.mock("../../pull-requests/PullRequestsScreen", () => ({ PullRequestsScreen: () => null }));
-vi.mock("../../issues/IssuesScreen", () => ({ IssuesScreen: () => null }));
-vi.mock("./ListSearchToolbar.android", () => ({ ListSearchToolbar: () => null }));
+vi.mock("../../pull-requests/PullRequestsScreen", () => ({
+  PullRequestsScreen: ({
+    renderFrame,
+  }: {
+    renderFrame?: (filters: null, list: ReactNode) => ReactNode;
+  }) => (renderFrame ? renderFrame(null, "Pull requests list") : "Pull requests list"),
+}));
+vi.mock("../../issues/IssuesScreen", () => ({
+  IssuesScreen: ({
+    renderFrame,
+  }: {
+    renderFrame?: (filters: null, list: ReactNode) => ReactNode;
+  }) => (renderFrame ? renderFrame(null, "Issues list") : "Issues list"),
+}));
 vi.mock("./AndroidWorkspaceNavigation", () => ({
   AndroidWorkspaceNavigation: () => null,
   FloatingWorkspaceTabs: () => null,
@@ -278,10 +371,31 @@ vi.mock("./AndroidWorkspaceSidebar.android", () => ({ AndroidWorkspaceSidebar: (
 vi.mock("../../../components/ui/WorkspaceAppBar.android", () => ({
   WorkspaceAppBarScope: ({ children }: { children: ReactNode }) => children,
 }));
+vi.mock("../../settings/SettingsRouteScreen", () => ({ WorkspaceSettingsList: () => null }));
+vi.mock("../../settings/settings-navigation", () => ({ openSettings: () => undefined }));
+vi.mock("../../home/WorkspaceConnectionTitle", () => ({
+  WorkspaceConnectionTitle: () => "You are offline",
+}));
+vi.mock("../../keyboard/hardwareKeyboardCommands", () => ({
+  useHardwareKeyboardCommand: () => undefined,
+}));
+vi.mock("../../../components/CompactBrandTitle", () => ({ CompactBrandTitle: () => null }));
+vi.mock("../../../native/native-glass", () => ({ NATIVE_LIQUID_GLASS_SUPPORTED: false }));
+vi.mock("../../../native/native-layout-metrics", () => ({
+  useDeviceType: () => "phone",
+  useNativeColumnLayoutMetrics: () => null,
+  useNativeLayoutMetrics: () => null,
+}));
+vi.mock("./WorkspaceTabDock", () => ({ WorkspaceTabDock: () => null }));
+vi.mock("./WorkspaceSharedSlotList", () => import("./WorkspaceSharedSlotList.harmony"));
+vi.mock("./WorkspaceToolbar", () => ({ WorkspaceToolbar: () => null }));
+vi.mock("./WorkspaceSectionToolbar", () => ({ WorkspaceSectionToolbar: () => null }));
 
 function setup(split: boolean, floating: boolean, state = selected("usage")) {
   mocks.split = split;
   mocks.floating = floating;
+  mocks.platform = "android";
+  mocks.route = "Home";
   mocks.state = state;
   mocks.openWorkspaceTab = () => undefined;
   mocks.backListeners.clear();
@@ -308,6 +422,72 @@ it("Back from the Pulls tab returns to Threads instead of leaving the app", asyn
 
   expect(pressBack()).toBe(true);
   expect(opened).toEqual(["threads"]);
+});
+
+it("shows Pulls search and switches to the Issues search from a saved view even while offline on HarmonyOS", async () => {
+  using _actEnvironment = setup(false, false);
+  mocks.platform = "harmony";
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  using _root = { [Symbol.dispose]: () => act(() => root.unmount()) };
+
+  function HarmonyWorkspace() {
+    const [state, setState] = useState(() =>
+      workspaceTabsReducer(
+        workspaceTabsReducer(selected("pullRequests"), { type: "search", tab: "issues" }),
+        { type: "query", tab: "issues", query: "keyboard" },
+      ),
+    );
+    const dispatch: NonNullable<React.ContextType<typeof WorkspaceTabsContext>>["dispatch"] = (
+      action,
+    ) => setState((current) => workspaceTabsReducer(current, action));
+    return createElement(
+      WorkspaceTabsContext,
+      {
+        value: {
+          state,
+          dispatch,
+          settingsOpen: false,
+          bottomClearance: 0,
+          isTabActive: (tab) => state.selectedTab === tab,
+          getScrollOffset: () => 0,
+          recordScrollOffset: () => undefined,
+          cancelSearch: (tab) => dispatch({ type: "cancel", tab }),
+        },
+      },
+      createElement(HarmonyWorkspaceRootScreen),
+    );
+  }
+
+  const searchPulls = () =>
+    Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Search pull requests",
+    );
+  await act(async () => root.render(createElement(HarmonyWorkspace)));
+  expect(searchPulls(), container.innerHTML).toBeDefined();
+  await act(async () => searchPulls()?.click());
+  expect(container.querySelector('input[aria-label="Search pull requests"]')).not.toBeNull();
+  mocks.route = "PullRequest";
+  expect(pressBack()).toBe(false);
+  mocks.route = "Home";
+  await act(async () => expect(pressBack()).toBe(true));
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Pull requests, switch list"]')
+      ?.click(),
+  );
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Issues")
+      ?.click(),
+  );
+  expect(
+    container.querySelector<HTMLInputElement>('input[aria-label="Search issues"]')?.value,
+  ).toBe("keyboard");
+  expect(container.textContent).toContain("Issues list");
+  await act(async () => expect(pressBack()).toBe(true));
+  expect(container.querySelector('input[aria-label="Search issues"]')).toBeNull();
 });
 
 it.each([

@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 
 import {
   projectThreadContentPresentation,
+  threadFeedIsLoading,
   threadSyncStatusLabel,
 } from "./threadContentPresentation";
 
@@ -36,4 +37,18 @@ describe("thread content presentation", () => {
     expect(threadSyncStatusLabel("cached", "ready", true)).toBe("Could not sync messages");
     expect(threadSyncStatusLabel("cached", "ready", false)).toBe("Syncing messages…");
   });
+
+  it.each([
+    ["initial detail pending", "loading", false, false, true],
+    ["pending with local rows", "loading", true, false, false],
+    ["initial rows positioning", "ready", true, true, true],
+    ["visible rows", "ready", true, false, false],
+    ["empty conversation", "ready", false, false, false],
+    ["unavailable conversation", "unavailable", false, false, false],
+  ] as const)(
+    "shows the spinner only while waiting for conversation content: %s",
+    (_scenario, presentation, hasRows, isPositioningRows, expected) => {
+      expect(threadFeedIsLoading({ presentation, hasRows, isPositioningRows })).toBe(expected);
+    },
+  );
 });

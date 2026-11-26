@@ -203,9 +203,10 @@ function ImagePreview(props: ImagePreviewProps) {
   );
 }
 
-function AndroidFilePreview(props: FilePreviewViewerProps) {
+function FilePreviewViewer(props: FilePreviewViewerProps & { readonly externalPdf?: boolean }) {
   const { source } = props;
-  if (source.kind === "pdf") return <PdfDocumentPreview {...props} source={source} />;
+  if (source.kind === "pdf" && !props.externalPdf)
+    return <PdfDocumentPreview {...props} source={source} />;
   if (source.kind !== "image") return <DocumentPreview {...props} source={source} />;
   const selected = source.images[source.selectedIndex]!;
   const images = source.images.filter((image) => !image.failed);
@@ -223,7 +224,19 @@ function AndroidFilePreview(props: FilePreviewViewerProps) {
   );
 }
 
+function SystemPdfFilePreview(props: FilePreviewViewerProps) {
+  return <FilePreviewViewer {...props} externalPdf />;
+}
+
 /** Shows images, PDFs and documents full screen. */
-export function FilePreviewModal(props: FilePreviewModalProps) {
-  return <FilePreviewSession {...props} progressiveGallery={false} Viewer={AndroidFilePreview} />;
+export function FilePreviewModal(
+  props: FilePreviewModalProps & { readonly externalPdf?: boolean },
+) {
+  return (
+    <FilePreviewSession
+      {...props}
+      progressiveGallery={false}
+      Viewer={props.externalPdf ? SystemPdfFilePreview : FilePreviewViewer}
+    />
+  );
 }

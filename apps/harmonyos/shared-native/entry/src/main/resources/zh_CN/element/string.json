@@ -1,0 +1,10 @@
+{
+  "string": [
+    {
+      "name": "microphone_permission_reason",
+      "value": "T3 Code 在您主动录制语音提示词时使用麦克风。"
+    },
+    { "name": "shortcut_new_task", "value": "新建任务" },
+    { "name": "shortcut_pair_environment", "value": "添加环境" }
+  ]
+}

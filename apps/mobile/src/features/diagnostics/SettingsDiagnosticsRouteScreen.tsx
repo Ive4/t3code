@@ -73,7 +73,7 @@ function useCrashLogState(): CrashLogState {
 
 function appIdentity() {
   return {
-    version: Constants.expoConfig?.version ?? "0.0.0",
+    version: Constants.expoConfig?.version ?? Application.nativeApplicationVersion ?? "0.0.0",
     // EAS assigns build numbers remotely, so expo-constants never sees them;
     // only the installed binary knows its own.
     build: Application.nativeBuildVersion ?? "dev",

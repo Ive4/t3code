@@ -504,7 +504,12 @@ export function markdownForNativeParsing(markdown: string): string {
 }
 
 export function parseMarkdownDocument(markdown: string): Root {
-  return parser.parse(markdownForNativeParsing(markdown));
+  return parseMarkdownDocumentWithSource(markdown).root;
+}
+
+export function parseMarkdownDocumentWithSource(markdown: string) {
+  const source = markdownForNativeParsing(markdown);
+  return { source, root: parser.parse(source) };
 }
 
 export function markdownForNativeRendering(markdown: string, fileLink: RegExp): string {

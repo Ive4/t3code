@@ -72,6 +72,7 @@ function CloudEnvironmentRowsContent(
 ) {
   const gt = useGT();
   const controller = useConnectionController();
+  const discovery = controller.relayDiscovery;
   const discoveryAvailable = props.discoveryAvailable ?? true;
   const availableCloudEnvironments = discoveryAvailable
     ? (props.showcaseAvailableEnvironments ?? controller.availableRelayEnvironments)
@@ -136,32 +137,34 @@ function CloudEnvironmentRowsContent(
             />
           ))}
         </View>
-      ) : controller.relayDiscovery.isRefreshing ? (
+      ) : discovery.isRefreshing ? (
         <View collapsable={false} className="items-center gap-3 rounded-[24px] bg-grouped-card p-6">
           <AppActivityIndicator colorClassName={"accent-icon"} />
           <Text className="text-center text-sm leading-normal text-foreground-muted">
             <T>Loading linked cloud environments.</T>
           </Text>
         </View>
-      ) : controller.relayDiscovery.error ? null : (
+      ) : discovery.isOffline ? (
+        <View collapsable={false} className="rounded-[24px] bg-grouped-card p-5">
+          <Text className="text-sm leading-normal text-foreground-muted">
+            {gt("You are offline")}
+          </Text>
+        </View>
+      ) : discovery.hasListed && !discovery.error ? (
         <View collapsable={false} className="rounded-[24px] bg-grouped-card p-5">
           <Text className="text-sm leading-normal text-foreground-muted">
             <T>No additional linked cloud environments.</T>
           </Text>
         </View>
-      )}
+      ) : null}
 
-      {discoveryAvailable &&
-      controller.relayDiscovery.error &&
-      !controller.relayDiscovery.isRefreshing ? (
+      {discoveryAvailable && discovery.error && !discovery.isRefreshing && !discovery.isOffline ? (
         <View collapsable={false} className="gap-3 rounded-[24px] bg-grouped-card p-5">
           <Text className="text-base font-t3-bold text-foreground">
             {gt("Could not load {product} environments", { product: "T3 Connect" })}
           </Text>
-          <Text className="text-sm text-foreground-muted">{controller.relayDiscovery.error}</Text>
-          {controller.relayDiscovery.errorTraceId ? (
-            <CopyTraceIdButton traceId={controller.relayDiscovery.errorTraceId} />
-          ) : null}
+          <Text className="text-sm text-foreground-muted">{discovery.error}</Text>
+          {discovery.errorTraceId ? <CopyTraceIdButton traceId={discovery.errorTraceId} /> : null}
           <Button
             label={gt("Try again")}
             tone="secondary"
@@ -194,6 +197,7 @@ function ConnectedCloudEnvironmentRow(props: {
   );
   const canRetry = presentation !== null && hasSavedBearerRoute(presentation.entry);
   const enabled = props.environment.isEnabled && !unsupported;
+  const awaitingApproval = enabled && presentation?.connection.awaitingApproval === true;
   const { diagnosis } = useConnectionDiagnosis(props.environment.environmentId, presentation);
   const [lastDescriptor, setLastDescriptor] = useState(props.descriptor);
   if (props.descriptor !== undefined && props.descriptor !== lastDescriptor) {
@@ -210,7 +214,7 @@ function ConnectedCloudEnvironmentRow(props: {
         : {})}
       connectionErrorTraceId={enabled ? props.environment.connectionErrorTraceId : null}
       connectionState={enabled || unsupported ? props.environment.connectionState : "available"}
-      awaitingApproval={enabled && presentation?.connection.awaitingApproval === true}
+      awaitingApproval={awaitingApproval}
       errorExpanded={props.errorExpanded}
       label={props.environment.environmentLabel}
       machine={resolveEnvironmentMachineKind(
@@ -220,7 +224,7 @@ function ConnectedCloudEnvironmentRow(props: {
       onToggleError={props.onToggleError}
       disabled={unsupported && !canRetry}
       {...(enabled || unsupported
-        ? diagnosis
+        ? diagnosis && !awaitingApproval
           ? { statusText: diagnosis.headline }
           : {}
         : { statusText: gt("Off", { $context: "environment is switched off" }) })}
@@ -326,7 +330,8 @@ function CloudEnvironmentRowShell(props: {
     : statusText;
   const errorLineCount =
     errorMeasurement?.text === measuredErrorText ? errorMeasurement.lineCount : 0;
-  const errorCanExpand = props.connectionError !== null && errorLineCount > 1;
+  const errorCanExpand =
+    !props.awaitingApproval && props.connectionError !== null && errorLineCount > 1;
   const isErrorExpanded = errorCanExpand && props.errorExpanded;
   const StatusContainer = errorCanExpand ? Pressable : View;
   const ContentContainer = props.onOpen || props.onRemove ? Pressable : View;
@@ -372,7 +377,7 @@ function CloudEnvironmentRowShell(props: {
             {props.label}
           </Text>
         </View>
-        {props.connectionError ? (
+        {props.connectionError && !props.awaitingApproval ? (
           <Text
             aria-hidden
             pointerEvents="none"
@@ -390,7 +395,7 @@ function CloudEnvironmentRowShell(props: {
         >
           <Text
             className={cn("min-w-0 flex-1 text-xs", statusClassName)}
-            numberOfLines={isErrorExpanded ? undefined : 1}
+            numberOfLines={props.awaitingApproval || isErrorExpanded ? undefined : 1}
           >
             {statusText}
             {errorTraceId ? (

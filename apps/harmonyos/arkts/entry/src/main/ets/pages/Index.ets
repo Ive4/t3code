@@ -3,6 +3,7 @@ import { FrameCallback, KeyboardAvoidMode, LengthMetrics } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { util } from '@kit.ArkTS';
 import { preferences } from '@kit.ArkData';
+import pasteboard from '@ohos.pasteboard';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
 import { EnvironmentSummary } from '../client/EnvironmentStore';
 import { COMPOSER_COMMAND_CONTEXT_MAX_RECORDS, composerCommandContextReference,
@@ -41,6 +42,12 @@ import type { LinkedEnvironmentBatchResult, LinkedEnvironmentCandidate, NativeLi
   from '../client/LinkedEnvironmentProtocol';
 import { checkEnvironmentRelease } from '../client/EnvironmentMaintenanceProtocol';
 import type { EnvironmentMaintenanceProvider, EnvironmentMaintenanceSnapshot } from '../client/EnvironmentMaintenanceProtocol';
+import { defaultClientPreferences, updateClientPreference } from '../client/ClientPreferencesProtocol';
+import type { ClientPreferenceKey, ClientPreferencesSnapshot, ClientPreferenceValue } from '../client/ClientPreferencesProtocol';
+import { ClientPreferencesStore } from '../client/ClientPreferencesStore';
+import type { EnvironmentPreferencesSnapshot } from '../client/EnvironmentPreferencesProtocol';
+import type { NativeProviderSummary } from '../client/ProvidersProtocol';
+import type { NativeScheduledTask } from '../client/ScheduledTasksProtocol';
 import { AccountView } from './AccountView';
 import { AddEnvironmentView } from './AddEnvironmentView';
 import { EnvironmentDetails } from './EnvironmentDetails';
@@ -106,7 +113,7 @@ import type { NativeThreadBackgroundTask } from '../client/ThreadBackgroundWorkP
 import { LinkedThreadUnavailableError } from '../client/LinkedEnvironmentProtocol';
 import { WorkspaceChatRow, WorkspaceComposeButton, WorkspaceDock, WorkspaceHeader, WorkspaceSharedTab, WorkspaceTab,
   WorkspaceThreadSectionTitle, WorkspaceThreadShelf, WorkspaceThreadSwipeAction, workspaceHeaderColor,
-  workspaceSurfaceColor } from './WorkspaceChrome';
+  workspaceForegroundColor, workspaceMutedColor, workspaceSurfaceColor } from './WorkspaceChrome';
 import type { WorkspaceFilterGroup, WorkspaceFilterOption } from './WorkspaceChrome';
 import { workspaceThreadListEntries, workspaceThreadRowStatus, workspaceThreadTimeLabel } from './WorkspaceThreadListModel';
 import type { WorkspaceThreadListEntry, WorkspaceThreadSection } from './WorkspaceThreadListModel';
@@ -527,6 +534,11 @@ struct Index {
   @State private settingsProjectFilter: string = '';
   @State private settingsPages: WorkspaceSettingsPage[] = [];
   @State private settingsScrollOffset: number = 0;
+  @State private clientPreferences: ClientPreferencesSnapshot = defaultClientPreferences();
+  @State private environmentPreferences: EnvironmentPreferencesSnapshot | undefined = undefined;
+  @State private providersList: NativeProviderSummary[] = [];
+  @State private scheduledTasksList: NativeScheduledTask[] = [];
+  private clientPreferencesStore: ClientPreferencesStore | undefined = undefined;
   private readonly settingsScroller: Scroller = new Scroller();
   private readonly workspaceScroller: Scroller = new Scroller();
   private workspaceScrollOffset: number = 0;
@@ -808,7 +820,9 @@ struct Index {
       return;
     }
     this.context = host as common.UIAbilityContext;
+    this.clientPreferencesStore = new ClientPreferencesStore(this.context);
     void this.restoreLanguagePreference();
+    void this.restoreClientPreferences();
     this.client = new T3Client(this.context);
     this.automaticApprovals = new ConnectDeviceApprovals((prompt: ConnectDeviceApprovalPrompt | undefined) => {
       this.automaticApprovalPrompt = prompt;
@@ -2612,9 +2626,118 @@ struct Index {
     }
   }
 
+  private async restoreClientPreferences(): Promise<void> {
+    const store = this.clientPreferencesStore;
+    if (!store) return;
+    try {
+      this.clientPreferences = await store.load();
+    } catch (_) {}
+  }
+
+  private updateClientPreferenceEntry(key: ClientPreferenceKey, value: ClientPreferenceValue): void {
+    const next = updateClientPreference(this.clientPreferences, key, value);
+    this.clientPreferences = next;
+    const store = this.clientPreferencesStore;
+    if (store) {
+      void store.save(next).catch(() => {
+        this.getUIContext().getPromptAction().showToast({
+          message: this.copy('无法保存客户端设置', 'Could not save client preference'),
+        });
+      });
+    }
+  }
+
+  private async loadEnvironmentSettingsSection(page: WorkspaceSettingsPage): Promise<void> {
+    const client = this.client;
+    if (!client || !this.connected) return;
+    try {
+      if (page === 'thread-preferences' || page === 'source-control' || page === 'worktrees' ||
+        page === 'maintenance' || page === 'labs') {
+        this.environmentPreferences = await client.readEnvironmentPreferences();
+      } else if (page === 'providers') {
+        this.providersList = await client.listProviders();
+      } else if (page === 'scheduled-tasks') {
+        this.scheduledTasksList = await client.listScheduledTasks();
+      }
+    } catch (error) {
+      this.getUIContext().getPromptAction().showToast({
+        message: (error as Error).message || this.copy('无法读取环境设置', 'Could not load environment settings'),
+      });
+    }
+  }
+
+  private applyEnvironmentPatch(patch: Record<string, Object | null | undefined>): void {
+    const client = this.client;
+    if (!client || !this.connected) return;
+    void client.updateEnvironmentSettings(patch).then(() => client.readEnvironmentPreferences()).then((next) => {
+      this.environmentPreferences = next;
+    }).catch((error: Error) => {
+      this.getUIContext().getPromptAction().showToast({
+        message: error.message || this.copy('无法保存环境设置', 'Could not save environment settings'),
+      });
+    });
+  }
+
+  private toggleProviderEnabled(instanceId: string, enabled: boolean, driver: string): void {
+    const client = this.client;
+    if (!client || !this.connected) return;
+    void client.setProviderEnabled(instanceId, enabled, driver).then(() => client.listProviders()).then((next) => {
+      this.providersList = next;
+    }).catch((error: Error) => {
+      this.getUIContext().getPromptAction().showToast({
+        message: error.message || this.copy('无法更新提供商状态', 'Could not update provider status'),
+      });
+    });
+  }
+
+  private toggleScheduledTaskEnabled(taskId: string, enabled: boolean): void {
+    const client = this.client;
+    if (!client || !this.connected) return;
+    void client.setScheduledTaskEnabled(taskId, enabled).then(() => client.listScheduledTasks()).then((next) => {
+      this.scheduledTasksList = next;
+    }).catch((error: Error) => {
+      this.getUIContext().getPromptAction().showToast({
+        message: error.message || this.copy('无法切换定时任务', 'Could not toggle scheduled task'),
+      });
+    });
+  }
+
+  private runScheduledTaskNow(taskId: string): void {
+    const client = this.client;
+    if (!client || !this.connected) return;
+    void client.runScheduledTaskNow(taskId).then(() => {
+      this.getUIContext().getPromptAction().showToast({
+        message: this.copy('已触发定时任务运行', 'Scheduled task triggered'),
+      });
+      return client.listScheduledTasks();
+    }).then((next) => {
+      this.scheduledTasksList = next;
+    }).catch((error: Error) => {
+      this.getUIContext().getPromptAction().showToast({
+        message: error.message || this.copy('无法运行定时任务', 'Could not run scheduled task'),
+      });
+    });
+  }
+
+  private copyDiagnosticsReport(report: string): void {
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, report);
+      void pasteboard.getSystemPasteboard().setData(data).then(() => {
+        this.getUIContext().getPromptAction().showToast({
+          message: this.copy('已复制诊断报告', 'Diagnostics report copied'),
+        });
+      });
+    } catch (_) {
+      this.getUIContext().getPromptAction().showToast({
+        message: this.copy('无法访问剪贴板', 'Clipboard unavailable'),
+      });
+    }
+  }
+
   private openSettingsPage(page: WorkspaceSettingsPage): void {
     this.rememberSettingsScroll();
     this.settingsPages = this.settingsPages.concat([page]);
+    void this.loadEnvironmentSettingsSection(page);
   }
 
   private selectWorkspaceTab(selection: WorkspaceTab): void {
@@ -4077,7 +4200,21 @@ struct Index {
         connected: this.connected,
         signedIn: this.accountIdentity !== undefined,
         environmentLabel: this.settingsEnvironment()?.label ?? '',
+        clientPreferences: this.clientPreferences,
+        environmentPreferences: this.environmentPreferences,
+        providers: this.providersList,
+        scheduledTasks: this.scheduledTasksList,
+        storageSummary: { cacheBytes: 0, environmentCount: this.visibleEnvironmentRows().length, clearable: false },
+        crashes: [],
         onLanguage: (value: UiLanguagePreference) => this.selectLanguagePreference(value),
+        onClientPreference: (key: ClientPreferenceKey, value: ClientPreferenceValue) =>
+          this.updateClientPreferenceEntry(key, value),
+        onEnvironmentPatch: (patch: Record<string, Object | null | undefined>) => this.applyEnvironmentPatch(patch),
+        onToggleProvider: (instanceId: string, enabled: boolean, driver: string) =>
+          this.toggleProviderEnabled(instanceId, enabled, driver),
+        onToggleScheduledTask: (taskId: string, enabled: boolean) => this.toggleScheduledTaskEnabled(taskId, enabled),
+        onRunScheduledTask: (taskId: string) => this.runScheduledTaskNow(taskId),
+        onCopyDiagnostics: (report: string) => this.copyDiagnosticsReport(report),
         onBack: () => { this.onBackPress(); },
         onOpenPage: (page: WorkspaceSettingsPage) => this.openSettingsPage(page),
         onAccount: () => this.openAccount(),
@@ -4144,6 +4281,7 @@ struct Index {
             Column({ space: 14 }) {
               Text(this.copy('还没有连接环境', 'No environment connected'))
                 .fontSize(18)
+                .fontColor(workspaceForegroundColor(this.darkAppearance))
                 .fontWeight(FontWeight.Medium)
               Button(this.copy('连接环境', 'Connect an environment'))
                 .height(44)
@@ -4187,7 +4325,7 @@ struct Index {
       }
       Text(label)
         .fontSize(15)
-        .fontColor($r('sys.color.font_secondary'))
+        .fontColor(workspaceMutedColor(this.darkAppearance))
         .textAlign(TextAlign.Center)
     }
     .layoutWeight(1)
@@ -4469,7 +4607,7 @@ struct Index {
       Row({ space: 8 }) {
         if (this.threadSearchLoading) LoadingProgress().width(18).height(18)
         Text(this.threadSearchLoading ? this.copy('正在搜索会话正文…', 'Searching thread messages…') : this.threadSearchError)
-          .fontSize(13).fontColor($r('sys.color.font_secondary')).layoutWeight(1)
+          .fontSize(13).fontColor(workspaceMutedColor(this.darkAppearance)).layoutWeight(1)
         if (this.threadSearchError) {
           Button('重试', { buttonStyle: ButtonStyleMode.TEXTUAL })
             .controlSize(ControlSize.SMALL).onClick(() => this.scheduleThreadSearch())
@@ -4480,7 +4618,7 @@ struct Index {
       Row({ space: 8 }) {
         Text(this.listError)
           .fontSize(14)
-          .fontColor($r('sys.color.font_secondary'))
+          .fontColor(workspaceMutedColor(this.darkAppearance))
           .layoutWeight(1)
         Button('重试')
           .controlSize(ControlSize.SMALL)
@@ -6548,6 +6686,7 @@ struct Index {
     .height('100%')
     .backgroundColor(this.isWorkspaceRoot() || this.selected
       ? workspaceHeaderColor(this.darkAppearance) : $r('sys.color.comp_background_primary'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .bindSheet(this.showThreadModel, this.ThreadModelSheet(), {
       height: SheetSize.LARGE,
       showClose: false,

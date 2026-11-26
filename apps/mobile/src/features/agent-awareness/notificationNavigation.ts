@@ -3,6 +3,7 @@ import type { NotificationResponse } from "expo-notifications";
 import { nativeNotifications } from "../../native/notifications";
 import { setAndroidThreadOnScreen } from "./androidNotifications";
 import { foregroundNotificationBehavior } from "./foregroundNotificationBehavior";
+import { installHarmonyAgentNotifications } from "./harmonyAgentNotifications";
 import { routeAgentNotificationResponseOnce, threadDeepLinkOnScreen } from "./notificationPayload";
 import { consumeLastAgentNotificationResponse } from "./notificationResponseConsumer";
 
@@ -21,7 +22,7 @@ export function setAgentNotificationPathname(pathname: string): void {
  */
 export function installAgentNotificationNavigation(navigate: (href: string) => void): () => void {
   const Notifications = nativeNotifications;
-  if (!Notifications) return () => undefined;
+  if (!Notifications) return installHarmonyAgentNotifications(navigate, () => deepLinkOnScreen);
   const handledResponseIds = new Set<string>();
   Notifications.setNotificationHandler({
     handleNotification: (notification) =>

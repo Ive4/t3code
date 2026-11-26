@@ -1,3 +1,5 @@
+import { useGT } from "gt-react-native";
+import { Platform } from "react-native";
 import { useEnvironmentQuery } from "../../state/query";
 import { useSelectedThreadGitActions } from "../../state/use-selected-thread-git-actions";
 import { useSelectedThreadGitState } from "../../state/use-selected-thread-git-state";
@@ -27,6 +29,7 @@ export function useReviewHeaderPresentation(props: {
   readonly selectedSection: ReviewSectionItem | null;
   readonly onRefresh: () => Promise<void>;
 }): ReviewHeaderPresentation {
+  const gt = useGT();
   const { selectedThread, selectedThreadProject } = useThreadSelection();
   const gitState = useSelectedThreadGitState();
   const gitActions = useSelectedThreadGitActions();
@@ -56,5 +59,13 @@ export function useReviewHeaderPresentation(props: {
     subtitle: props.subtitle,
     menuIcon: "ellipsis",
     gitMenu: gitMenuAvailable ? gitMenu : null,
+    ...(String(Platform.OS) === "harmony" && {
+      refreshAction: {
+        id: "refresh",
+        title: gt("Refresh current diff"),
+        disabled: !props.selectedSection || props.selectedSection.isLoading,
+        onPress: () => void props.onRefresh(),
+      },
+    }),
   };
 }

@@ -23,7 +23,7 @@ import {
 } from "@t3tools/contracts";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import type { MenuAction } from "@react-native-menu/menu";
-import { DateTimePicker } from "@expo/ui/community/datetime-picker";
+import { DateTimePicker } from "../../components/ui/DateTimePicker";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -152,9 +152,7 @@ function describeSchedule(
 function formatTime(value: string): string {
   const [hours, minutes] = value.split(":").map(Number);
   if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return value;
-  const time = new Date();
-  time.setHours(hours ?? 9, minutes ?? 0, 0, 0);
-  return time.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return timePickerValue(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 function formatRunAtDate(value: Date): string {
@@ -167,14 +165,14 @@ function formatRunAtTime(value: Date): string {
 
 function timePickerValue(value: string): Date {
   const [hours, minutes] = value.split(":").map(Number);
-  const time = new Date();
-  time.setHours(
+  // Use a stable date so a clock change on the device today can't shift the server's time of day.
+  return new Date(
+    2000,
+    0,
+    15,
     Number.isInteger(hours) ? (hours ?? 9) : 9,
     Number.isInteger(minutes) ? (minutes ?? 0) : 0,
-    0,
-    0,
   );
-  return time;
 }
 
 function isWeekdays(weekdays: ReadonlyArray<number>): boolean {
@@ -1225,10 +1223,8 @@ function TaskForm({
                 <DateTimePicker
                   value={timePickerValue(draft.schedule.timeOfDay)}
                   mode="time"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
                   onDismiss={() => setTimePickerOpen(false)}
-                  onValueChange={(_, selected) => {
-                    if (Platform.OS === "android") setTimePickerOpen(false);
+                  onSelect={(selected) => {
                     const timeOfDay = `${String(selected.getHours()).padStart(2, "0")}:${String(selected.getMinutes()).padStart(2, "0")}`;
                     setDraft((current) => ({
                       ...current,
@@ -1322,11 +1318,8 @@ function TaskForm({
                     <DateTimePicker
                       value={runAt}
                       mode={field}
-                      display={Platform.OS === "ios" ? "spinner" : "default"}
                       onDismiss={() => setRunAtPicker(null)}
-                      onValueChange={(_, selected) => {
-                        // Android shows a dialog that closes on pick; iOS stays inline.
-                        if (Platform.OS === "android") setRunAtPicker(null);
+                      onSelect={(selected) => {
                         setDraft((current) => ({
                           ...current,
                           schedule: { ...current.schedule, runAt: selected.toISOString() },

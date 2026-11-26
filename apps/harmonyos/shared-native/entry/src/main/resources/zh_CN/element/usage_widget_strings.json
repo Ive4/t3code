@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "订阅剩余"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "打开 T3 以刷新"
+    }
+  ]
+}

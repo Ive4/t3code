@@ -1,13 +1,15 @@
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { existsSync, readFileSync, realpathSync, statSync } = require("node:fs");
-const { copyFile, mkdir, mkdtemp, rm } = require("node:fs/promises");
+const { copyFile, mkdir, mkdtemp, rm, writeFile } = require("node:fs/promises");
 const { createRequire, registerHooks } = require("node:module");
 const { platform, tmpdir } = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { parseArgs } = require("node:util");
 const { loadConfig, runBuild } = require("metro");
+const { buildTerminalDocument } = require("./terminal-document.cjs");
+const { sharedCloudConfig } = require("./shared-cloud-config.cjs");
 
 const harmonyRoot = path.resolve(__dirname, "..");
 const mobileRoot = path.resolve(harmonyRoot, "../mobile");
@@ -29,19 +31,25 @@ const runtimePackages = [
 const ports = new Map(
   [
     ["expo-application", "expo-application"],
-    ["expo-audio", "expo-audio-unavailable"],
+    ["expo-audio", "expo-audio"],
     ["expo-clipboard", "expo-clipboard"],
     ["expo-crypto", "expo-crypto"],
     ["expo-device", "expo-device"],
+    ["expo-document-picker", "expo-document-picker"],
     ["expo/fetch", "expo-fetch"],
     ["expo-file-system", "expo-file-system"],
     ["expo-haptics", "expo-haptics"],
     ["expo-image", "expo-image"],
+    ["expo-image-manipulator", "expo-image-manipulator"],
+    ["expo-image-picker", "expo-image-picker"],
+    ["expo-keep-awake", "expo-keep-awake"],
     ["expo-network", "expo-network"],
     ["expo-secure-store", "expo-secure-store"],
+    ["expo-sensors", "expo-sensors"],
     ["expo-sharing", "expo-sharing"],
     ["expo-sqlite", "expo-sqlite"],
     ["expo-updates", "expo-updates"],
+    ["react-native-webview", "react-native-webview"],
   ].map(([request, moduleName]) => [
     request,
     path.join(sharedRoot, "ports", moduleName + ".harmony.js"),
@@ -49,7 +57,6 @@ const ports = new Map(
 );
 
 const nativeFallbacks = new Set(["T3ComposerEditor", "T3KeyboardCommands"]);
-
 // The pinned RNOH Hermes build disables Intl, so these polyfills always install.
 const requiredIntlPolyfills = new Set([
   "@formatjs/intl-datetimeformat/polyfill",
@@ -125,8 +132,12 @@ function loadFrameworkConfig(frameworkRoot) {
   }
 }
 
-function configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot) {
-  const reactRoot = path.dirname(require.resolve("react/package.json"));
+function configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot, cloudConfigPath) {
+  // Clerk loads React DOM transitively. Both entry points must use the Harmony renderer's React version.
+  const reactPackageRoots = ["react", "react-dom"].map((name) => [
+    name,
+    path.dirname(require.resolve(name + "/package.json")),
+  ]);
   const gtRequire = createRequire(mobileRequire.resolve("gt-react-native"));
   const intlRequire = createRequire(gtRequire.resolve("gt-i18n"));
   const intlPackages = ["@formatjs/intl-numberformat", "@formatjs/intl-datetimeformat"];
@@ -147,8 +158,32 @@ function configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot) 
     const origin = context.originModulePath.replaceAll("\\", "/");
     if (platform === "harmony") {
       if (requiredIntlPolyfills.has(request)) request += "-force";
+      if (origin.includes("/mobile/src/") && request.endsWith("/nativeTerminalModule")) {
+        return { type: "sourceFile", filePath: path.join(sharedRoot, "terminal", "surface.js") };
+      }
+      if (origin.endsWith("/shared/terminal/surface.js") && request === "./document") {
+        return {
+          type: "sourceFile",
+          filePath: path.join(path.dirname(cloudConfigPath), "terminalDocument.js"),
+        };
+      }
       const port = ports.get(request);
       if (port) return { type: "sourceFile", filePath: port };
+      if (
+        origin.endsWith("/mobile/src/features/cloud/publicConfig.ts") &&
+        request === "./cloudConfigExtra"
+      ) {
+        return { type: "sourceFile", filePath: cloudConfigPath };
+      }
+      if (
+        origin.includes("/@clerk/expo/") &&
+        (request === "expo-auth-session" || request === "expo-web-browser")
+      ) {
+        return {
+          type: "sourceFile",
+          filePath: path.join(sharedRoot, "ports", request + ".harmony.js"),
+        };
+      }
       if (
         origin.includes("/@react-navigation/native-stack/") &&
         request.endsWith("/NativeStackView")
@@ -157,8 +192,10 @@ function configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot) 
       }
       const nativeModule = request.split("/").at(-1);
       if (origin.includes("/mobile/src/") && nativeFallbacks.has(nativeModule)) {
-        const fallback = path.join(mobileRoot, "src/native", nativeModule + ".tsx");
-        return resolve(context, fallback, platform);
+        return {
+          type: "sourceFile",
+          filePath: path.join(mobileRoot, "src/native", nativeModule + ".harmony.tsx"),
+        };
       }
       if (
         origin.includes("/react-native-gesture-handler/") &&
@@ -175,8 +212,10 @@ function configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot) 
         }
       }
     }
-    if (request === "react" || request.startsWith("react/")) {
-      return resolve(context, path.join(reactRoot, request.slice("react".length)), platform);
+    for (const [name, packageRoot] of reactPackageRoots) {
+      if (request === name || request.startsWith(name + "/")) {
+        return resolve(context, path.join(packageRoot, request.slice(name.length)), platform);
+      }
     }
 
     function resolveFramework(ctx, name, targetPlatform) {
@@ -305,10 +344,19 @@ async function bundle() {
     ...config.resolver.extraNodeModules,
     ...mobileConfig.resolver.extraNodeModules,
   };
-  configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot);
-
   const temporary = await mkdtemp(path.join(tmpdir(), "t3-harmony-uniwind-"));
   try {
+    const cloudConfigPath = path.join(temporary, "cloudConfigExtra.js");
+    await writeFile(
+      cloudConfigPath,
+      `exports.getCloudConfigExtra = () => (${JSON.stringify(sharedCloudConfig())});\n`,
+    );
+    await writeFile(
+      path.join(temporary, "terminalDocument.js"),
+      `module.exports = ${JSON.stringify(await buildTerminalDocument())};\n`,
+    );
+    config.watchFolders.push(temporary);
+    configureResolver(config, frameworkConfig, frameworkRoot, runtimeRoot, cloudConfigPath);
     const styledConfig = withUniwindConfig(config, {
       cssEntryFile: "../mobile/global.css",
       extraThemes: mobileRequire("./generated-uniwind-theme-names.json"),

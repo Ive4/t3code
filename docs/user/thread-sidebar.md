@@ -136,20 +136,26 @@ open.
 
 ### Fold working threads (beta)
 
-Threads that are working or waiting on work they will resume from move into a collapsed
-**Working** section below the active list.
+On web and desktop, threads that are working or waiting on work they will resume from move into
+a collapsed **Working** section below the active list.
 That includes subagents, watched pull requests with checks still running, Claude monitors,
 and background commands or other monitors the agent says it is waiting on. A dev server or other process an agent leaves running does not keep a thread
 there. A thread returns to the top of the active list when it finishes, fails, or needs an approval or
 answer. The Working section lists the thread you last sent work to first. Pinned threads stay in
 the pinned section.
 
-This is on by default. Turn it off with **Settings → General → Working section** on web and desktop,
-or **Settings → General → Working section** on iOS and Android. Each device keeps its own
-choice.
+This is on by default. Turn it off with **Settings → General → Working section**. Each device
+keeps its own choice.
 
 While this is on, the active list is ordered by when each thread last came back to you, so you
 cannot drag or move threads within it. Your saved order returns when you turn it off.
+
+### Prioritize chats on mobile
+
+The **Chats** tab puts requests for approval or input, plans ready for review, and new failures
+above running work. Unread results come next and move to **Recent chats** after you open them.
+Pinned chats stay at the top. You can collapse **Working** when you want to focus on what needs
+you. Turn off **Settings → General → Prioritize chats** to use your manual order.
 
 ### Group threads by project (beta)
 

@@ -4,6 +4,21 @@ export interface ThreadWorkGroupScrollPosition {
   readonly scrollOffset: number;
 }
 
+export function resolveThreadFeedClearance(input: {
+  readonly overlayHeight: number;
+  readonly controlInset: number;
+  readonly keyboardHeight: number;
+  readonly keyboardProgress: number;
+  readonly keyboardOffset: number;
+}) {
+  "worklet";
+  return (
+    input.overlayHeight +
+    input.controlInset +
+    Math.max(0, input.keyboardHeight - input.keyboardOffset * input.keyboardProgress)
+  );
+}
+
 export function resolveThreadWorkGroupInitialScroll(
   rows: ReadonlyArray<{ readonly id: string }>,
   position: ThreadWorkGroupScrollPosition | undefined,

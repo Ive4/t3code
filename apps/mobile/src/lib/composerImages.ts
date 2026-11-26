@@ -24,7 +24,7 @@ import {
 } from "./composerAttachmentFiles";
 import { imageMimeType } from "@t3tools/shared/image";
 import { videoMimeType } from "@t3tools/shared/video";
-import { fitComposerImage, renderPhoto } from "./composerImageFit";
+import { fitComposerImage, removeTemporaryComposerImage, renderPhoto } from "./composerImageFit";
 import { beginForegroundHandoff } from "./foreground-handoff";
 import { uuidv4 } from "./uuid";
 import { writeFileAtomically } from "./atomic-file";
@@ -376,9 +376,11 @@ export async function pickComposerFiles(input: {
       }
       const { File } = await import("expo-file-system");
       let fileUri = attachment.fileUri;
+      let renderUri: string | undefined;
       try {
         const original = await new File(fileUri).base64();
         const candidate = await fitComposerImage({ uri: fileUri, mimeType, base64: original });
+        renderUri = candidate?.uri;
         const fitted =
           candidate !== null &&
           estimateBase64ByteSize(candidate.base64) <= PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
@@ -395,6 +397,8 @@ export async function pickComposerFiles(input: {
       } catch (cause) {
         await removePersistedComposerAttachmentFile(attachment.fileUri);
         throw cause;
+      } finally {
+        if (renderUri !== undefined) await removeTemporaryComposerImage(renderUri);
       }
       attachments.push(await ownedComposerImageAttachment({ fileUri, name, mimeType }));
     } catch (cause) {
@@ -580,13 +584,12 @@ export async function pickComposerMedia(input: {
       continue;
     }
 
-    const sizeBytes = estimateBase64ByteSize(image.base64);
-    if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
-      error = m(msg("''{name}'' exceeds the 10 MB attachment limit.", { name }));
-      continue;
-    }
-
     try {
+      const sizeBytes = estimateBase64ByteSize(image.base64);
+      if (sizeBytes <= 0 || sizeBytes > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
+        error = m(msg("''{name}'' exceeds the 10 MB attachment limit.", { name }));
+        continue;
+      }
       const fileUri = await persistComposerAttachmentFile(
         image.uri,
         image.name,
@@ -597,6 +600,8 @@ export async function pickComposerMedia(input: {
       );
     } catch (cause) {
       error = errorDisplayMessage(cause, m) ?? m(msg("Failed to read ''{name}''.", { name }));
+    } finally {
+      if (image.uri !== asset.uri) await removeTemporaryComposerImage(image.uri);
     }
   }
 

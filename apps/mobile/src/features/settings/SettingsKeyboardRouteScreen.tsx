@@ -16,7 +16,7 @@ import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoi
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 
-const SEND_MODIFIER = Platform.OS === "android" ? "Ctrl" : "Command";
+const SEND_MODIFIER = ["android", "harmony"].includes(Platform.OS) ? "Ctrl" : "Command";
 
 const ENTER_BEHAVIOR_OPTIONS: ReadonlyArray<{
   readonly behavior: ComposerEnterBehavior;

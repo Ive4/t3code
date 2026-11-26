@@ -13,6 +13,7 @@ export type MediaVideoPreviewSource = {
   readonly type: "media";
   readonly name: string;
   readonly mimeType: string;
+  readonly initialPosition?: number;
   readonly sourceIdentifier?: string;
   readonly srcFragment?: string;
   readonly actionsSource?: MediaActionsSource;

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>T3 Code 华为推送</title>
+    <link rel="stylesheet" href="setup.css" />
+    <script src="setup.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>T3 Code 华为推送</h1>
+      <section aria-labelledby="t3-label">
+        <div class="row">
+          <div>
+            <h2 id="t3-label">本机 T3 Code</h2>
+            <p id="t3-status">正在读取连接状态</p>
+          </div>
+          <button id="pair" disabled>连接 T3 Code</button>
+        </div>
+      </section>
+      <section aria-labelledby="huawei-label">
+        <div class="row">
+          <div>
+            <h2 id="huawei-label">华为账号</h2>
+            <p id="huawei-status">正在读取登录状态</p>
+          </div>
+          <button id="login" disabled>扫码登录</button>
+          <button id="logout" class="secondary" hidden>退出登录</button>
+        </div>
+        <div id="authorization" class="authorization" hidden>
+          <img id="qr" width="228" height="228" alt="华为账号授权二维码" />
+          <div>
+            <p>使用已登录同一华为账号的手机扫码授权。</p>
+            <a id="verification" target="_blank" rel="noopener noreferrer">在浏览器中授权</a>
+          </div>
+        </div>
+      </section>
+      <div class="feedback" aria-live="polite">
+        <p id="message"></p>
+        <button id="startup" hidden>重试启用后台启动</button>
+      </div>
+    </main>
+  </body>
+</html>

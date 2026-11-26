@@ -1,5 +1,5 @@
 import { ClerkProvider, getClerkInstance } from "@clerk/expo";
-import { tokenCache } from "@clerk/expo/token-cache";
+import { tokenCache } from "./accountTokenCache";
 import type { ReactNode } from "react";
 
 import { cloudAccountService, deactivateCloudRelayAccount } from "./cloudAccountService";

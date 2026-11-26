@@ -149,6 +149,7 @@ export function useMediaActions(
       file.dispose();
       if (saved === null) return;
       if (AsyncResult.isFailure(saved)) throw squashAtomCommandFailure(saved);
+      if (!saved.value || signal.aborted) return;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     });
 

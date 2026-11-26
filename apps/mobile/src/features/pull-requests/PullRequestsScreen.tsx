@@ -22,6 +22,7 @@ import { EmptyState } from "../../components/ui/EmptyState";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
 import { useWorkspaceState } from "../../state/workspace";
+import { isWorkspaceCatalogPending } from "../../state/workspaceModel";
 import { useProjects } from "../../state/entities";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { PullRequestListRow } from "./PullRequestListRow";
@@ -100,7 +101,7 @@ export function PullRequestsScreen(
   const gt = useGT();
   const primaryColumn = use(NativePrimaryColumnContext);
   const workspace = useWorkspaceTabs()!;
-  const { environments } = useWorkspaceState();
+  const { environments, state: workspaceState } = useWorkspaceState();
   const configs = useAtomValue(environmentServerConfigsAtom);
   const insets = useSafeAreaInsets();
   const contentTopInset = useContentTopInset();
@@ -174,6 +175,13 @@ export function PullRequestsScreen(
         environment.connectionState === "connected",
     ),
   );
+  const isLoadingList =
+    workspaceState.isLoadingConnections ||
+    (workspaceState.networkStatus !== "offline" &&
+      ((result.isPending && connectedTargets.length > 0) ||
+        (connectedTargets.length === 0 &&
+          !result.error &&
+          isWorkspaceCatalogPending(workspaceState))));
   const { actions, select, busyKey } = usePullRequestListActions(
     connectedTargets.map((target) => target.environmentId),
     result.updateEntry,
@@ -401,9 +409,10 @@ export function PullRequestsScreen(
           ) : undefined
         }
         ListEmptyComponent={
-          result.isPending && connectedTargets.length > 0 ? (
-            <View className="items-center py-12">
+          isLoadingList ? (
+            <View className="items-center gap-3 py-12">
               <AppActivityIndicator colorClassName="accent-icon" />
+              <Text className="text-sm text-foreground-muted">{gt("Loading…")}</Text>
             </View>
           ) : (
             <View className="px-8 py-12">

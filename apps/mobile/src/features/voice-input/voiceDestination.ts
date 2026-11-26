@@ -25,14 +25,13 @@ import { effectiveSpeechLanguage } from "@t3tools/shared/speech";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Atom, AsyncResult, AtomRegistry } from "effect/reactivity";
-import { requireOptionalNativeModule } from "expo";
-import { fetch as expoFetch } from "expo/fetch";
 
 import { appAtomRegistry } from "../../state/atom-registry";
 import { environmentPresentations } from "../../state/presentation";
 import { environmentSession, sessionHasScope } from "../../state/session";
 import { connectionAtomRuntime } from "../../connection/runtime";
 import { uuidv4 } from "../../lib/uuid";
+import { decodeVoiceRecording, fetchSpeech } from "../../native/voiceCapture";
 import { createEnvironmentTranscriber } from "./environmentTranscriber";
 import { readVoiceGrant, writeVoiceGrant, type VoiceGrant } from "./voiceGrantStorage";
 
@@ -88,10 +87,7 @@ export function pendingCloudVoiceChoice(
   };
 }
 
-const native = requireOptionalNativeModule<{
-  decodeRecording?: (uri: string) => Promise<Uint8Array>;
-}>("T3VoiceTranscription");
-export const hasEnvironmentVoiceCapture = typeof native?.decodeRecording === "function";
+export const hasEnvironmentVoiceCapture = typeof decodeVoiceRecording === "function";
 
 const voiceConnections = (capability: "voiceTranscription" | "cloudVoiceTranscription") =>
   Atom.family((id: EnvironmentId) =>
@@ -129,7 +125,7 @@ export function runSpeech<A, E>(
                 code: "cancelled",
                 message: m(msg("Your transcription choice changed.")),
               });
-            return expoFetch(url, { ...options, redirect: "error" });
+            return fetchSpeech(url, options);
           }),
           Effect.provide(context),
         ),
@@ -175,12 +171,12 @@ function environmentTranscriber(
         : "auto";
     },
     decode: (uri) => {
-      if (!native?.decodeRecording)
+      if (!decodeVoiceRecording)
         throw new VoiceTranscriptionError({
           code: "unavailable",
           message: m(msg("Update T3 Code to transcribe on an environment.")),
         });
-      return native.decodeRecording(uri);
+      return decodeVoiceRecording(uri);
     },
     upload: async (pcm, signal) =>
       (

@@ -184,28 +184,34 @@ function ResolvedFilePreview(
     if (props.onOpenError) return props.onOpenError(error);
     Dialog.alert(gt("Could not open preview"), nativeViewerErrorMessage(error), [
       { text: gt("Cancel"), style: "cancel" },
-      ...(selected.kind === "document"
-        ? [
-            {
-              text: gt("Save or share"),
-              onPress: () => {
-                const input = {
-                  attachment: {
-                    name: selected.name,
-                    mimeType: selected.mimeType ?? "application/octet-stream",
-                  },
-                  signal: new AbortController().signal,
-                };
-                const sharing = /^(file|content):/.test(uri)
-                  ? shareLocalAttachment({ ...input, uri })
-                  : downloadAndShareAttachment({ ...input, url: uri });
-                void sharing.catch(() =>
-                  Dialog.alert(gt("Could not share file"), gt("Please try again.")),
-                );
+      {
+        text: gt("Save or share"),
+        onPress: () => {
+          const signal = new AbortController().signal;
+          void (async () => {
+            const source = await resolvePreviewUri(selected, signal);
+            if (!source) return;
+            const input = {
+              attachment: {
+                name: selected.name,
+                mimeType:
+                  selected.mimeType ??
+                  (selected.kind === "pdf" ? "application/pdf" : "application/octet-stream"),
               },
-            },
-          ]
-        : []),
+              signal,
+            };
+            try {
+              if (/^(file|content):/.test(source.uri)) {
+                await shareLocalAttachment({ ...input, uri: source.uri });
+              } else {
+                await downloadAndShareAttachment({ ...input, url: source.uri });
+              }
+            } finally {
+              source.dispose?.();
+            }
+          })().catch(() => Dialog.alert(gt("Could not share file"), gt("Please try again.")));
+        },
+      },
     ]);
   };
   const actionsSource =

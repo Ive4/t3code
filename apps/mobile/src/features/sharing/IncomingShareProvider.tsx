@@ -4,13 +4,8 @@ import { m } from "../../i18n/messages";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
 import { EnvironmentId, PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
-import {
-  clearSharedPayloads,
-  getResolvedSharedPayloadsAsync,
-  getSharedPayloads,
-  type ResolvedSharePayload,
-  type SharePayload,
-} from "expo-sharing";
+import * as Sharing from "expo-sharing";
+import type { ResolvedSharePayload, SharePayload } from "expo-sharing";
 import { msg } from "gt-react-native";
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
@@ -22,8 +17,9 @@ import {
   selectIncomingShareAttachmentsForServer,
   type IncomingShareDestination,
   type IncomingShareDraft,
+  type IncomingSharePayload,
 } from "./incoming-share-model";
-import { createIncomingSharePayloadReader } from "./incoming-share-native";
+import { createIncomingSharePayloadReader, startNativeShareInbox } from "./incoming-share-native";
 import { IncomingShareInbox } from "./incoming-share-inbox";
 import { persistComposerAttachmentFile } from "../../lib/composerImages";
 import { subscribeAppActive } from "../../lib/appState";
@@ -51,7 +47,16 @@ import {
   writeIncomingShareDraft,
 } from "./incoming-share-storage";
 
+const harmony = String(Platform.OS) === "harmony";
+const harmonySharing = Sharing as typeof Sharing & {
+  isIncomingSharingAvailable?: () => boolean;
+  addIncomingShareListener?: (listener: () => void) => { remove: () => void };
+};
+
 function receiveSharingEnabled(): boolean {
+  if (harmony) {
+    return harmonySharing.isIncomingSharingAvailable?.() === true;
+  }
   if (Platform.OS === "android") {
     return true;
   }
@@ -63,12 +68,12 @@ function receiveSharingEnabled(): boolean {
 
 const getIncomingSharePayloads = createIncomingSharePayloadReader({
   platform: Platform.OS,
-  readPayloads: getSharedPayloads,
+  readPayloads: Sharing.getSharedPayloads,
 });
 
 async function resolvedPayloadsForFiles(): Promise<ReadonlyArray<ResolvedSharePayload>> {
   try {
-    return await getResolvedSharedPayloadsAsync();
+    return await Sharing.getResolvedSharedPayloadsAsync();
   } catch (error) {
     // Raw iOS copied file URLs remain usable; Android's File API can read content URIs when resolution fails.
     console.warn("[incoming-share] could not resolve shared file metadata", error);
@@ -76,12 +81,18 @@ async function resolvedPayloadsForFiles(): Promise<ReadonlyArray<ResolvedSharePa
   }
 }
 
-async function incomingShareIdForPayloads(payloads: ReadonlyArray<SharePayload>): Promise<string> {
+async function incomingShareIdForPayloads(
+  payloads: ReadonlyArray<IncomingSharePayload>,
+): Promise<string> {
   const fingerprint = JSON.stringify(
     payloads.map((payload) => ({
       shareType: payload.shareType,
       mimeType: payload.mimeType ?? null,
       value: payload.value,
+      ...(payload.stagingIssue && {
+        stagingIssue: payload.stagingIssue,
+        originalName: payload.originalName,
+      }),
     })),
   );
   const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, fingerprint);
@@ -151,7 +162,7 @@ const incomingShareInbox = new IncomingShareInbox({
   writeDraft: writeIncomingShareDraft,
   removeDraft: removeIncomingShareDraft,
   getPayloads: getIncomingSharePayloads,
-  clearPayloads: clearSharedPayloads,
+  clearPayloads: Sharing.clearSharedPayloads,
   buildDraft: async ({ payloads, id, createdAt }) => {
     const cleanupUris = new Set<string>();
     const persistedUris = new Set<string>();
@@ -159,7 +170,8 @@ const incomingShareInbox = new IncomingShareInbox({
       ["file", "audio", "video"].includes(payload.shareType),
     );
     const resolvedPayloads =
-      !hasGenericFilePayload && payloads.some((payload) => payload.shareType === "image")
+      (harmony && hasGenericFilePayload) ||
+      (!hasGenericFilePayload && payloads.some((payload) => payload.shareType === "image"))
         ? await resolvedPayloadsForFiles()
         : [];
     const draft = await buildIncomingShareDraft({
@@ -280,12 +292,18 @@ export function presentPendingIncomingShare(): void {
   );
 }
 
-/** App-lifetime: loads the inbox and re-ingests native handoffs on every resume. */
 export function startIncomingShareInbox(): () => void {
-  void refreshIncomingShares();
-  return receiveSharingEnabled()
-    ? subscribeAppActive(() => void refreshIncomingShares())
-    : () => {};
+  return startNativeShareInbox({
+    enabled: receiveSharingEnabled(),
+    refresh: () => void refreshIncomingShares(),
+    subscribeAppActive,
+    subscribeNativeShare: (listener) => {
+      const subscription = harmony
+        ? harmonySharing.addIncomingShareListener?.(listener)
+        : undefined;
+      return () => subscription?.remove();
+    },
+  });
 }
 
 async function consumeShare(shareId: string) {

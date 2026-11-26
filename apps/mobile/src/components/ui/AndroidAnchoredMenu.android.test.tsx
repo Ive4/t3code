@@ -46,6 +46,7 @@ vi.mock("../../native/window-hinge-context", () => ({
 }));
 vi.mock("./OverlayPortal", () => ({
   OverlayPortal: (props: { readonly children?: ReactNode }) => <>{props.children}</>,
+  useModalOverlayScope: () => false,
 }));
 vi.mock("./useAndroidControlSizing", () => ({
   useAndroidControlSizing: () => ({ scale: 1, menuWidth: 200, menuItemHeight: 48 }),

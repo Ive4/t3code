@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "Subscription remaining"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "Open T3 to refresh"
+    }
+  ]
+}

@@ -31,6 +31,20 @@ module.exports = {
       source = source.replace(componentName, '"RNKeyboardControllerView"');
     }
     if (
+      filename.includes("/react-native-keyboard-controller/") &&
+      filename.endsWith("/src/animated.tsx")
+    ) {
+      const platform = "const OS = Platform.OS;";
+      if (!source.includes(platform)) {
+        throw new Error("The keyboard controller's animation platform changed: " + filename);
+      }
+      // RNOH sends interpolated move frames and the final end frame like Android.
+      source = source.replace(
+        platform,
+        'const OS = Platform.OS === "harmony" ? "android" : Platform.OS;',
+      );
+    }
+    if (
       filename.includes("/react-native-gesture-handler/") &&
       filename.endsWith("/src/v3/detectors/common.ts")
     ) {

@@ -3,7 +3,10 @@ import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
 
-import type { SettingsPageTarget } from "./components/settings-page-targets";
+import {
+  appearanceSettingsAvailable,
+  type SettingsPageTarget,
+} from "./components/settings-page-targets";
 
 /** What each page holds besides its row's label, so search finds a setting by its own name. */
 const SETTINGS_SEARCH_TERMS = {
@@ -199,9 +202,20 @@ export interface SettingsSearchSection<Row extends SettingsSearchRow> {
 export function filterSettingsSections<
   Row extends SettingsSearchRow,
   Section extends SettingsSearchSection<Row>,
->(sections: readonly Section[], query: string, resolve: MessageResolver = m): Section[] {
+>(
+  sections: readonly Section[],
+  query: string,
+  platform: string,
+  resolve: MessageResolver = m,
+): Section[] {
+  const availableSections = appearanceSettingsAvailable(platform)
+    ? sections
+    : sections.map((section) => ({
+        ...section,
+        rows: section.rows.filter((row) => row.id !== "SettingsAppearance"),
+      }));
   const normalizedQuery = foldSearchQuery(query);
-  const rows = sections.flatMap((section) =>
+  const rows = availableSections.flatMap((section) =>
     section.rows.map((row) => ({ row, section: section.title })),
   );
   const matched = normalizedQuery
@@ -219,7 +233,7 @@ export function filterSettingsSections<
         ).map(({ item }) => item.row),
       )
     : null;
-  return sections.flatMap((section) => {
+  return availableSections.flatMap((section) => {
     const kept = matched ? section.rows.filter((row) => matched.has(row)) : section.rows;
     return kept.length ? [{ ...section, rows: kept }] : [];
   });

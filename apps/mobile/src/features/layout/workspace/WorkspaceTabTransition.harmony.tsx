@@ -5,8 +5,6 @@ import Animated, {
   LayoutAnimationConfig,
   ReduceMotion,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { MOBILE_MOTION } from "../../../lib/designTokens";
 
 const TAB_ENTER = FadeIn.duration(MOBILE_MOTION.adjust)
@@ -15,13 +13,9 @@ const TAB_ENTER = FadeIn.duration(MOBILE_MOTION.adjust)
   .reduceMotion(ReduceMotion.System);
 
 export function WorkspaceTabTransition({ children, tab }: PropsWithChildren<{ tab: string }>) {
-  const { top } = useSafeAreaInsets();
-  // These lists have no app bar to account for the status bar.
-  const paddingTop = tab === "pullRequests" || tab === "issues" ? top : 0;
-
   return (
     <LayoutAnimationConfig skipEntering>
-      <Animated.View key={tab} entering={TAB_ENTER} className="flex-1" style={{ paddingTop }}>
+      <Animated.View key={tab} entering={TAB_ENTER} className="flex-1">
         {children}
       </Animated.View>
     </LayoutAnimationConfig>

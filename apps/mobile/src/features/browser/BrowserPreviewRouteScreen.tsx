@@ -15,6 +15,7 @@ import { Menu } from "../../components/ui/Menu";
 import { useContentTopInset } from "../../components/ui/useBarInset";
 import { m } from "../../i18n/messages";
 import { useAppForeground } from "../../lib/appState";
+import { HarmonyClipboardPasteButton } from "../../native/HarmonyClipboardPasteButton";
 
 import { useThreadServerBrowserTabs } from "../../state/preview";
 import { usePreparedConnection } from "../../state/session";
@@ -118,6 +119,7 @@ function BrowserPreviewScreen({
   const live = (focused && foreground) || pictureInPicture.active;
 
   const ready = streaming && canControl;
+  const harmony = String(Platform.OS) === "harmony";
   const command: PreviewStreamRef["command"] = (input) => streamRef.current?.command(input);
   const showPictureInPicture =
     // Android WebView cannot play video in picture in picture.
@@ -152,6 +154,9 @@ function BrowserPreviewScreen({
           },
           trailing: (
             <>
+              {harmony && ready && live ? (
+                <HarmonyClipboardPasteButton onPaste={(text) => command({ type: "text", text })} />
+              ) : null}
               {showPictureInPicture ? (
                 <ControlPill
                   icon={{
@@ -190,7 +195,7 @@ function BrowserPreviewScreen({
                   environmentId={environmentId}
                   tab={tab}
                   streaming={streaming}
-                  onPaste={ready ? () => streamRef.current?.paste() : undefined}
+                  onPaste={ready && !harmony ? () => streamRef.current?.paste() : undefined}
                   onReleaseControl={ready ? () => command({ type: "releaseControl" }) : undefined}
                 />
               ) : null}

@@ -106,6 +106,7 @@ import {
   getCachedNativeReviewDiffData,
   NATIVE_REVIEW_DIFF_CONTENT_WIDTH,
 } from "../review/nativeReviewDiffAdapter";
+import { ReviewDiffFallback } from "../review/ReviewDiffFallback";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { useAppearanceCodeSurface } from "../settings/appearance/useAppearanceCodeSurface";
 import { useNativeReviewDiffBridge } from "../review/useNativeReviewDiffBridge";
@@ -1173,7 +1174,7 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
     .filter((file) => isFileDiffCollapsed(file.id, null, foldChoices, viewedIdSet.has(file.id)))
     .map((file) => file.id);
   const [visibleFileId, setVisibleFileId] = useState<string | null>(null);
-  const nativeView = useRef<NativeReviewDiffViewHandle>(null);
+  const diffView = useRef<NativeReviewDiffViewHandle>(null);
   // The filter the current jump was made under. Hiding or showing test files replaces the rows,
   // so a jump made under the other filter has to run again. Native applies the entry
   // destination before its first viewport, so the first one counts as made.
@@ -1184,9 +1185,9 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
   const jumpStarted = () =>
     jumpedUnder.current !== null && (!hasTestFiles || jumpedUnder.current === filter.hideTestFiles);
   const scrollToFile = (fileId: string) => {
-    if (!nativeView.current) return;
+    if (!diffView.current) return;
     jumpedUnder.current = filter.hideTestFiles;
-    void nativeView.current.scrollToFile(fileId, false).catch(() => {
+    void diffView.current.scrollToFile(fileId, false).catch(() => {
       jumpedUnder.current = null;
     });
   };
@@ -1206,6 +1207,8 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
   useEffect(() => subscribePullRequestFileJump(routeKey, (path) => jumpToFile(path)), [routeKey]);
   const { nativeReviewDiffStyle } = useAppearanceCodeSurface();
   const { themeAppearance, appearance, setCodeWordBreak } = useAppearancePreferences();
+  const [NativeDiffView] = useState(() => resolveNativeReviewDiffView());
+  const selectedRowIds = selectedRowId ? [selectedRowId] : focusedRows.map((row) => row.id);
   const bridge = useNativeReviewDiffBridge({
     threadKey: null,
     sectionId: `pull-request:${route.params.repository}:${route.params.number}:${commit ?? "all"}`,
@@ -1213,10 +1216,9 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
     data,
     collapsedFileIds: collapsedIds,
     viewedFileIds: viewedIds,
-    selectedRowIds: selectedRowId ? [selectedRowId] : focusedRows.map((row) => row.id),
-    canHighlight: true,
+    selectedRowIds,
+    canHighlight: NativeDiffView !== null,
   });
-  const [NativeDiffView] = useState(() => resolveNativeReviewDiffView());
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- requests the next page of the paged diff query until the jump target file has loaded
   useEffect(() => {
     if (!targetFile) loadMore();
@@ -1232,7 +1234,7 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
       targetFileId: targetFile?.id,
       focusIndex,
       isIos: Platform.OS === "ios",
-      nativeView,
+      nativeView: diffView,
       jumpStarted,
       setJumpStarted: (started) => {
         jumpedUnder.current = started ? filter.hideTestFiles : null;
@@ -1240,12 +1242,51 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
       onDebug: bridge.onDebug,
       loadMore,
     });
-  const onToggleFile: NonNullable<NativeReviewDiffViewProps["onToggleFile"]> = (event) => {
-    const id = event.nativeEvent.fileId;
+  const toggleFile = (id: string | undefined) => {
     if (!id) return;
     setFoldChoices((current) =>
       withFileDiffFold(current, id, !isFileDiffCollapsed(id, null, current, viewedIdSet.has(id))),
     );
+  };
+  const pressLine = (rowId: string | null, gesture: "tap" | "longPress" | undefined) => {
+    setSelectedRowId(rowId);
+    if (gesture !== "longPress") commentOnLine(rowId);
+  };
+  const toggleViewedFile = (fileId: string | undefined) => {
+    const file = data.files.find((file) => file.id === fileId);
+    if (!file || (!commit && !viewed.canToggle)) return;
+    setFoldChoices((current) => withFileDiffFold(current, file.id, undefined));
+    if (commit)
+      setCommitViewedPaths((current) => {
+        const next = new Set(current);
+        if (next.has(file.path)) next.delete(file.path);
+        else next.add(file.path);
+        return next;
+      });
+    else void viewed.toggle(file.path);
+  };
+  const loadWithheldFile = (fileId: string | undefined) => {
+    const file = data.files.find((file) => file.id === fileId);
+    if (file) result.loadWithheldFile(file.path);
+  };
+  const openDiffComment = (id: string | undefined) => {
+    if (id?.startsWith("discussion:")) {
+      navigation.navigate("PullRequestDiscussion", {
+        ...route.params,
+        discussionId: id.slice("discussion:".length),
+      });
+    } else if (id?.startsWith("draft:")) {
+      const draft = reviewDraft.draft.comments.find(
+        (draft) => draft.id === id.slice("draft:".length),
+      );
+      if (draft) {
+        navigation.navigate("PullRequestInlineComment", {
+          ...route.params,
+          ...draft,
+          draftId: draft.id,
+        });
+      }
+    }
   };
   const visibleFile = data.files.find((file) => file.id === visibleFileId) ?? targetFile;
   const toggleTestFiles = () => {
@@ -1257,10 +1298,23 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
   const seekingFile = !targetFile && result.nextCursor !== null;
   const loadingDiff = (result.isPending && !data.rows.length) || (seekingFile && !result.error);
   const verticalControls = usePullRequestVerticalControls();
+  const showDiff = data.rows.length > 0 && !seekingFile;
+  const contentResetKey = `pull-request:${route.params.environmentId}:${route.params.repository}:${route.params.number}:${commit ?? "all"}`;
+  const openFiles = () => navigation.navigate("PullRequestFiles", route.params);
   const diffMenu: AppBarMenu = {
     title: gt("Diff options"),
     icon: "ellipsis",
     items: [
+      ...(showDiff && NativeDiffView === null
+        ? [
+            {
+              id: "changed-files",
+              title: gt("Changed files"),
+              icon: "file.diff",
+              onPress: openFiles,
+            },
+          ]
+        : []),
       ...(permissions.verdicts.length
         ? [
             {
@@ -1383,11 +1437,11 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
               />
             </View>
           ) : null}
-          {NativeDiffView && data.rows.length && !seekingFile ? (
+          {NativeDiffView && showDiff ? (
             <View className="flex-1" collapsable={false}>
               <NativeDiffView
                 {...pullRequestDiffInitialPosition(targetFile?.id, focusIndex)}
-                nativeViewRef={nativeView}
+                nativeViewRef={diffView}
                 refreshing={result.refreshing}
                 onPullToRefresh={result.onPullRefresh}
                 style={StyleSheet.absoluteFill}
@@ -1400,55 +1454,49 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
                 onDebug={onDebug}
                 viewedFileIdsJson={bridge.viewedFileIdsJson}
                 selectedRowIdsJson={bridge.selectedRowIdsJson}
-                onPressLine={(event) => {
-                  const rowId = event.nativeEvent.rowId ?? null;
-                  setSelectedRowId(rowId);
-                  if (event.nativeEvent.gesture !== "longPress") commentOnLine(rowId);
-                }}
-                onToggleViewedFile={(event) => {
-                  const file = data.files.find((file) => file.id === event.nativeEvent.fileId);
-                  if (!file || (!commit && !viewed.canToggle)) return;
-                  setFoldChoices((current) => withFileDiffFold(current, file.id, undefined));
-                  if (commit)
-                    setCommitViewedPaths((current) => {
-                      const next = new Set(current);
-                      if (next.has(file.path)) next.delete(file.path);
-                      else next.add(file.path);
-                      return next;
-                    });
-                  else void viewed.toggle(file.path);
-                }}
-                onPressNotice={(event) => {
-                  const file = data.files.find((file) => file.id === event.nativeEvent.fileId);
-                  if (file) result.loadWithheldFile(file.path);
-                }}
-                onToggleComment={(event) => {
-                  const id = event.nativeEvent.commentId;
-                  if (id?.startsWith("discussion:"))
-                    navigation.navigate("PullRequestDiscussion", {
-                      ...route.params,
-                      discussionId: id.slice("discussion:".length),
-                    });
-                  if (id?.startsWith("draft:")) {
-                    const draft = reviewDraft.draft.comments.find(
-                      (draft) => draft.id === id.slice("draft:".length),
-                    );
-                    if (draft)
-                      navigation.navigate("PullRequestInlineComment", {
-                        ...route.params,
-                        ...draft,
-                        draftId: draft.id,
-                      });
-                  }
-                }}
-                onToggleFile={onToggleFile}
+                onPressLine={({ nativeEvent }) =>
+                  pressLine(nativeEvent.rowId ?? null, nativeEvent.gesture)
+                }
+                onToggleViewedFile={({ nativeEvent }) => toggleViewedFile(nativeEvent.fileId)}
+                onPressNotice={({ nativeEvent }) => loadWithheldFile(nativeEvent.fileId)}
+                onToggleComment={({ nativeEvent }) => openDiffComment(nativeEvent.commentId)}
+                onToggleFile={({ nativeEvent }) => toggleFile(nativeEvent.fileId)}
                 onVisibleFileChange={(event) => setVisibleFileId(event.nativeEvent.fileId ?? null)}
                 appearanceScheme={themeAppearance}
                 rowHeight={nativeReviewDiffStyle.rowHeight}
                 contentWidth={NATIVE_REVIEW_DIFF_CONTENT_WIDTH}
                 contentInsetTop={staleDiff ? 0 : contentTopInset}
                 contentInsetBottom={Platform.OS === "android" ? toolbarHeight : insets.bottom}
-                contentResetKey={`pull-request:${route.params.environmentId}:${route.params.repository}:${route.params.number}:${commit ?? "all"}`}
+                contentResetKey={contentResetKey}
+              />
+            </View>
+          ) : showDiff ? (
+            <View className="flex-1" style={{ paddingTop: staleDiff ? 0 : contentTopInset }}>
+              <ReviewDiffFallback
+                key={`${contentResetKey}:${filter.hideTestFiles}`}
+                ref={diffView}
+                rows={data.rows}
+                files={data.files}
+                scheme={themeAppearance}
+                collapsedFileIds={collapsedIds}
+                viewedFileIds={viewedIds}
+                selectedRowIds={selectedRowIds}
+                theme={bridge.theme}
+                diffStyle={nativeReviewDiffStyle}
+                initialFileId={targetFile?.id}
+                initialRowId={pickedPath === null ? focusedRows[0]?.id : undefined}
+                listHeader={null}
+                bottomInset={Platform.OS === "android" ? toolbarHeight : insets.bottom}
+                refreshing={result.refreshing}
+                onRefresh={result.onPullRefresh}
+                onEndReached={result.canLoadMore ? loadMore : undefined}
+                onVisibleFileChange={setVisibleFileId}
+                onToggleFile={toggleFile}
+                onToggleViewedFile={toggleViewedFile}
+                canToggleViewed={Boolean(commit) || viewed.canToggle}
+                onPressLine={pressLine}
+                onOpenComment={openDiffComment}
+                onPressNotice={loadWithheldFile}
               />
             </View>
           ) : filter.hiddenCount > 0 &&
@@ -1505,7 +1553,7 @@ function PullRequestFileRouteContent({ route }: PullRequestFileRouteProps) {
         params={route.params}
         filePath={visibleFile?.path}
         menu={diffMenu}
-        onOpenFiles={() => navigation.navigate("PullRequestFiles", route.params)}
+        onOpenFiles={openFiles}
         onHeightChange={setToolbarHeight}
       />
     </View>

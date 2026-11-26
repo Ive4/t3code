@@ -211,10 +211,11 @@ function defaultViewMode(path: string | null): FileViewMode {
     : "source";
 }
 
-// Android numbered rows are separate text views, so a long-press opens the whole file as one
+// Numbered rows are separate text views, so a long-press opens the whole file as one
 // selectable text at that line. Back returns to the numbered rows at the same line.
 function FileSourceSurface(props: ComponentProps<typeof SourceFileSurface>) {
   const navigation = useNavigation();
+  const usesWebSelection = ["android", "harmony"].includes(Platform.OS);
   const [selection, setSelection] = useState<{
     readonly line: number;
     readonly active: boolean;
@@ -231,8 +232,9 @@ function FileSourceSurface(props: ComponentProps<typeof SourceFileSurface>) {
       {...props}
       initialLine={selection?.line ?? props.initialLine}
       selectable={props.selectable === true || selection?.active === true}
+      selectableInWebView={usesWebSelection}
       onLongPressLine={
-        Platform.OS === "android" ? (line) => setSelection({ line, active: true }) : undefined
+        usesWebSelection ? (line) => setSelection({ line, active: true }) : undefined
       }
     />
   );
@@ -318,7 +320,12 @@ function FileContent(props: {
   }
 
   if (props.activeMode === "preview" && isBrowserFile) {
-    return <WorkspaceFileWebPreview uri={props.previewUri} />;
+    return (
+      <WorkspaceFileWebPreview
+        uri={props.previewUri}
+        allowWebFrames={/\.html?$/i.test(props.relativePath)}
+      />
+    );
   }
 
   if (props.fileError && props.fileContents === null) {
@@ -353,7 +360,7 @@ function FileContent(props: {
         />
       ) : (
         <FileSourceSurface
-          key={props.initialLine}
+          key={`${props.relativePath}:${props.initialLine ?? ""}`}
           contents={props.fileContents}
           path={props.relativePath}
           initialLine={props.initialLine}

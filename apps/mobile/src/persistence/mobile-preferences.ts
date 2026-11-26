@@ -133,6 +133,15 @@ const ThreadProject = Schema.Struct({
 });
 const isThreadProject = Schema.is(ThreadProject);
 
+const HarmonyNotificationPhases = Schema.Struct({
+  notifyOnApproval: Schema.optional(Schema.Boolean),
+  notifyOnInput: Schema.optional(Schema.Boolean),
+  notifyOnCompletion: Schema.optional(Schema.Boolean),
+  notifyOnFailure: Schema.optional(Schema.Boolean),
+});
+export type HarmonyNotificationPhases = typeof HarmonyNotificationPhases.Type;
+const isHarmonyNotificationPhases = Schema.is(HarmonyNotificationPhases);
+
 export interface Preferences {
   readonly navigationTabOrder?: readonly string[];
   readonly hiddenNavigationTabs?: readonly string[];
@@ -143,6 +152,8 @@ export interface Preferences {
   readonly pullRequestActivityVisibility?: PullRequestActivityVisibility;
   readonly pullRequestMergeMethod?: PullRequestMergeMethod;
   readonly liveActivitiesEnabled?: boolean;
+  readonly harmonyBackgroundNotificationsEnabled?: boolean;
+  readonly harmonyNotificationPhases?: HarmonyNotificationPhases;
   readonly themeId?: MobileThemeId;
   readonly lightThemeId?: MobileThemeId;
   readonly darkThemeId?: MobileThemeId;
@@ -236,6 +247,8 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     pullRequestActivityVisibility?: PullRequestActivityVisibility;
     pullRequestMergeMethod?: PullRequestMergeMethod;
     liveActivitiesEnabled?: boolean;
+    harmonyBackgroundNotificationsEnabled?: boolean;
+    harmonyNotificationPhases?: HarmonyNotificationPhases;
     themeId?: MobileThemeId;
     lightThemeId?: MobileThemeId;
     darkThemeId?: MobileThemeId;
@@ -302,6 +315,13 @@ function sanitizePreferences(parsed: Preferences): Preferences {
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
     preferences.liveActivitiesEnabled = parsed.liveActivitiesEnabled;
+  }
+  if (typeof parsed.harmonyBackgroundNotificationsEnabled === "boolean") {
+    preferences.harmonyBackgroundNotificationsEnabled =
+      parsed.harmonyBackgroundNotificationsEnabled;
+  }
+  if (isHarmonyNotificationPhases(parsed.harmonyNotificationPhases)) {
+    preferences.harmonyNotificationPhases = parsed.harmonyNotificationPhases;
   }
   if (
     typeof parsed.themeId === "string" &&

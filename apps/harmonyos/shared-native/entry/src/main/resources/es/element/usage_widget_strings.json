@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "Suscripción restante"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "Abre T3 para actualizar"
+    }
+  ]
+}

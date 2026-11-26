@@ -1,4 +1,3 @@
-import { requireNativeModule } from "expo";
 import { msg } from "gt-react-native";
 import { m } from "../i18n/messages";
 import {
@@ -40,6 +39,7 @@ import {
   waitForComposerDraftsLoaded,
 } from "../state/use-composer-drafts";
 import { loadLocalAttachmentPreview } from "./localAttachmentPreview";
+import { writeNativeComposerClipboard } from "./nativeComposerClipboard";
 
 export interface NativeContextClipboard {
   readonly text: string;
@@ -51,11 +51,6 @@ function checkAborted(signal: AbortSignal): void {
   if (signal.aborted) throw new Error("Context import cancelled");
 }
 
-const nativeClipboard = () =>
-  requireNativeModule<{
-    writeContextClipboard: (text: string, fragment: string) => Promise<void>;
-  }>("T3ComposerEditor");
-
 export function writeComposerContextClipboard(
   text: string,
   fragment: ComposerContextClipboardFragment,
@@ -65,7 +60,7 @@ export function writeComposerContextClipboard(
     return Promise.reject(
       new Error(m(msg("This context selection is too large to copy. Select fewer items."))),
     );
-  return nativeClipboard().writeContextClipboard(text, encoded);
+  return writeNativeComposerClipboard(text, encoded);
 }
 
 export async function importComposerContextClipboard(

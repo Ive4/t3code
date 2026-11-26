@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "Verbleibendes Abonnement"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "Öffne T3 zum Aktualisieren"
+    }
+  ]
+}

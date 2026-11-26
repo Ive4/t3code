@@ -1,5 +1,7 @@
 import type { ProjectEntry } from "@t3tools/contracts";
 
+import { compareFileNames } from "./compareFileNames";
+
 export interface FileTreeNode {
   readonly path: string;
   readonly name: string;
@@ -44,8 +46,6 @@ function freezeNode(node: MutableFileTreeNode): FileTreeNode {
   };
 }
 
-const fileNameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-
 function compareNodes(
   left: Pick<FileTreeNode, "kind" | "name">,
   right: Pick<FileTreeNode, "kind" | "name">,
@@ -53,7 +53,7 @@ function compareNodes(
   if (left.kind !== right.kind) {
     return left.kind === "directory" ? -1 : 1;
   }
-  return fileNameCollator.compare(left.name, right.name);
+  return compareFileNames(left.name, right.name);
 }
 
 export function buildFileTree(entries: ReadonlyArray<ProjectEntry>): ReadonlyArray<FileTreeNode> {

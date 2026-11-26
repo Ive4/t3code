@@ -40,6 +40,36 @@ vi.mock("expo-image-manipulator", () => ({
 }));
 
 describe("incoming native shares", () => {
+  it.each(["", "Review these files"])(
+    "reports files skipped by native staging with text %j",
+    async (text) => {
+      const payloads = [
+        { shareType: "file" as const, value: "", stagingIssue: {} },
+        {
+          shareType: "file" as const,
+          value: "",
+          originalName: "large.png",
+          stagingIssue: { maxBytes: PROVIDER_SEND_TURN_MAX_IMAGE_BYTES },
+        },
+        { shareType: "text" as const, value: text },
+      ];
+      const result = await buildIncomingShareDraft({
+        id: "share-1",
+        createdAt: "2026-07-15T10:00:00.000Z",
+        payloads,
+        resolvedPayloads: [],
+        fileReader: { readBase64: vi.fn(), removeOwnedFile: vi.fn() },
+      });
+
+      expect(result.text).toBe(text);
+      expect(hasIncomingShareContent(result)).toBe(text.length > 0);
+      expect(result.warnings).toEqual([
+        "One shared file could not be read.",
+        "'large.png' exceeds the 10 MB attachment limit.",
+      ]);
+    },
+  );
+
   it("converts shared text, URLs, and images into a durable composer draft", async () => {
     const image: SharePayload = {
       shareType: "image",

@@ -94,7 +94,7 @@ export function AttachmentDocumentBody(props: {
     return props.htmlRender ? (
       <HtmlRenderWebView key={document.uri} uri={document.uri} title={props.name} nested={false} />
     ) : (
-      <WorkspaceFileWebPreview uri={document.uri} />
+      <WorkspaceFileWebPreview uri={document.uri} allowWebFrames />
     );
   }
   return (

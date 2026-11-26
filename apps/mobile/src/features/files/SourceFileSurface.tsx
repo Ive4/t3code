@@ -53,6 +53,7 @@ interface SourceFileSurfaceProps {
   readonly initialLine?: number | null;
   readonly headerInsetTop?: number;
   readonly selectable?: boolean;
+  readonly selectableInWebView?: boolean;
   readonly onLongPressLine?: (line: number) => void;
   readonly onRefresh?: () => Promise<void> | void;
 }
@@ -281,8 +282,9 @@ function JavaScriptSourceFileSurface(props: SourceFileSurfaceProps) {
   ) : undefined;
 
   const usesLineList = !props.selectable;
-  // Android lays out a full selectable TextView on the UI thread, which can stall large files.
-  const usesWebSelection = props.selectable === true && Platform.OS === "android";
+  // A single native selectable text view can stall on large files.
+  const usesWebSelection =
+    props.selectable === true && (Platform.OS === "android" || props.selectableInWebView === true);
   const usesTextSelection = props.selectable === true && !usesWebSelection;
 
   // Layout effect so a pending jump is cancelled in the commit that swaps the file.
@@ -378,7 +380,7 @@ function JavaScriptSourceFileSurface(props: SourceFileSurfaceProps) {
         }),
       }}
       originWhitelist={["*"]}
-      // Android pastes copied HTML as styled text with collapsed whitespace, so copy plain text.
+      // Copy plain text so the destination preserves source whitespace.
       // Wrapped text reflows once the WebView reaches its final width, so scroll again then.
       injectedJavaScript={`addEventListener("copy",(event)=>{event.clipboardData.setData("text/plain",getSelection().toString());event.preventDefault();});${
         targetIndex === null

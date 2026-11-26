@@ -13,6 +13,7 @@ import { type KnownTerminalSession } from "@t3tools/client-runtime/state/termina
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppBar } from "../../components/ui/AppBar";
 import { useNativeColumnLayoutMetrics } from "../../native/native-layout-metrics";
+import { HarmonyClipboardPasteButton } from "../../native/HarmonyClipboardPasteButton";
 import { useContentTopInset } from "../../components/ui/useBarInset";
 import { StackActions, useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { useAtomMount } from "@effect/atom-react";
@@ -1104,12 +1105,19 @@ function ThreadTerminal(props: {
                           );
                         })}
                       </ComposerToolbarScroller>
-                      <ComposerToolbarButton
-                        accessibilityLabel={gt("Paste", { $context: "verb" })}
-                        icon={{ ios: "doc.on.clipboard", android: "content_paste" }}
-                        onPress={() => handlePaste(Clipboard.getStringAsync)}
-                        showChevron={false}
-                      />
+                      {String(Platform.OS) === "harmony" ? (
+                        <HarmonyClipboardPasteButton
+                          key={terminalId}
+                          onPaste={(text) => handlePaste(async () => text)}
+                        />
+                      ) : (
+                        <ComposerToolbarButton
+                          accessibilityLabel={gt("Paste", { $context: "verb" })}
+                          icon={{ ios: "doc.on.clipboard", android: "content_paste" }}
+                          onPress={() => handlePaste(Clipboard.getStringAsync)}
+                          showChevron={false}
+                        />
+                      )}
                       <ComposerToolbarButton
                         accessibilityLabel={gt("Dismiss keyboard")}
                         icon={{ ios: "keyboard.chevron.compact.down", android: "keyboard_hide" }}

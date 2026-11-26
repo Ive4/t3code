@@ -57,6 +57,7 @@ import {
 } from "./worktree-setup-card";
 import * as Haptics from "expo-haptics";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { useViewabilityAmount, type LegendListRef } from "@legendapp/list/react-native";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { HandoffEndpoints } from "@t3tools/client-runtime/handoff";
@@ -253,7 +254,11 @@ import {
   type ThreadFeedLatestRun,
   messageFoldRunId,
 } from "../../lib/threadActivity";
-import type { ThreadContentPresentation } from "./threadContentPresentation";
+import {
+  THREAD_LOADING_MESSAGES,
+  threadFeedIsLoading,
+  type ThreadContentPresentation,
+} from "./threadContentPresentation";
 import { type ThreadWorkGroupScrollPosition } from "./thread-feed-scroll-position";
 import {
   collapsedWorkLogHeight,
@@ -337,6 +342,7 @@ import {
 import { ZoomableImagePressable } from "./ZoomableImagePressable";
 import { openSettings } from "../settings/settings-navigation";
 import { loopbackUrlForDevice } from "../browser/browserTabs";
+import { supportsNativePreviewTunnel } from "../browser/TunnelWebView";
 import { useOpenLocalPreview } from "../browser/useOpenLocalPreview";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import {
@@ -400,6 +406,7 @@ export interface ThreadFeedProps {
   readonly jumpToMessageId?: MessageId | null;
   readonly onJumpedToMessage?: () => void;
   readonly contentInsetEndAdjustment: SharedValue<number>;
+  readonly reservesComposerViewport?: boolean;
   readonly keyboardOffset: number;
   readonly sendingWithKeyboard?: boolean;
   readonly fitShortFeedToViewport?: boolean;
@@ -1983,7 +1990,12 @@ function renderFeedEntry(
     readonly onCopyWorkRow: (rowId: string, value: string) => void;
     readonly onToggleWorkGroup: (groupId: string, anchorKey?: string) => void;
     readonly onToggleWorkRow: (rowId: string, anchorKey?: string, groupId?: string) => void;
-    readonly onToggleUserMessage: (rowId: string, anchorKey: string) => void;
+    readonly expandedUserMessages: ReadonlySet<MessageId>;
+    readonly onToggleUserMessage: (
+      messageId: MessageId,
+      anchorKey: string,
+      expanded: boolean,
+    ) => void;
     readonly onToggleTurnFold: (runId: RunId) => void;
     readonly onOpenTurnDiff: (checkpoint: ThreadCheckpointSummary) => void;
     readonly onPressPreview: (source: FilePreviewSource) => void;
@@ -2554,10 +2566,11 @@ function renderFeedEntry(
                       value={props.userBubbleMaxWidth - USER_BUBBLE_HORIZONTAL_PADDING * 2}
                     >
                       <CollapsibleUserMessageBody
+                        key={message.id}
                         collapsible={foldRowId === null}
-                        expanded={props.expandedWorkRows[`message:${message.id}`] ?? false}
-                        onToggle={() =>
-                          props.onToggleUserMessage(`message:${message.id}`, entry.id)
+                        readExpanded={() => props.expandedUserMessages.has(message.id)}
+                        onToggle={(expanded) =>
+                          props.onToggleUserMessage(message.id, entry.id, expanded)
                         }
                         bubbleColor={userBubbleColor}
                       >
@@ -2996,13 +3009,17 @@ function UserMessageMarkdownContent(props: UserMessageContentProps) {
   );
 }
 
-function ThreadFeedPlaceholder(props: {
-  readonly bottomInset: number;
-  readonly detail: string;
-  readonly horizontalPadding: number;
-  readonly title: string;
-  readonly topInset: number;
-}) {
+function ThreadFeedPlaceholder(
+  props: {
+    readonly bottomInset: number;
+    readonly horizontalPadding: number;
+    readonly title: string;
+    readonly topInset: number;
+  } & (
+    | { readonly loading: true; readonly detail?: never }
+    | { readonly loading?: false; readonly detail: string }
+  ),
+) {
   return (
     <View
       style={{
@@ -3015,11 +3032,25 @@ function ThreadFeedPlaceholder(props: {
         paddingHorizontal: props.horizontalPadding + 24,
       }}
     >
-      <View className="max-w-[320px] items-center gap-2">
-        <Text className="text-center font-t3-bold text-lg text-foreground">{props.title}</Text>
-        <Text className="text-center text-sm leading-normal text-foreground-secondary">
-          {props.detail}
-        </Text>
+      <View
+        className="max-w-[320px] items-center gap-2"
+        accessible={props.loading}
+        accessibilityRole={props.loading ? "progressbar" : undefined}
+        accessibilityState={props.loading ? { busy: true } : undefined}
+      >
+        {props.loading ? (
+          <>
+            <AppActivityIndicator size="small" />
+            <Text className="text-center text-sm text-foreground-secondary">{props.title}</Text>
+          </>
+        ) : (
+          <>
+            <Text className="text-center font-t3-bold text-lg text-foreground">{props.title}</Text>
+            <Text className="text-center text-sm leading-normal text-foreground-secondary">
+              {props.detail}
+            </Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -3207,6 +3238,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const disclosureSettleFrameRef = useRef<number | null>(null);
   const disclosureSettleSecondFrameRef = useRef<number | null>(null);
   const reduceMotion = useReduceMotionEnabled();
+  const [expandedUserMessages] = useState(() => new Set<MessageId>());
   const [interactionState, setInteractionState] = useState<{
     readonly copiedRowId: string | null;
     readonly expandedWorkGroups: Record<string, boolean>;
@@ -3584,7 +3616,9 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
         return {
           title: href,
           actions: [
-            { id: "open-on-device", title: gt("Open on this device") },
+            ...(supportsNativePreviewTunnel
+              ? [{ id: "open-on-device", title: gt("Open on this device") }]
+              : []),
             { id: "copy-link", title: gt("Copy link") },
           ],
         };
@@ -3608,7 +3642,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       }
       const deviceUrl = deviceLoopbackUrl(href);
       if (deviceUrl) {
-        if (actionId === "open-on-device") {
+        if (actionId === "open-on-device" && supportsNativePreviewTunnel) {
           markdownLinkRequest.current?.abort();
           openLocalPreview(
             { environmentId: String(props.environmentId), threadId: String(props.threadId) },
@@ -3943,8 +3977,10 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
   const { contentInsetEndAdjustment } = props;
   const attachList = (list: LegendListRef | null) => {
     listRef.current = list;
-    const bottom = contentInsetEndAdjustment.get();
-    if (list && bottom > 0) list.reportContentInset({ bottom });
+    if (list && !props.reservesComposerViewport) {
+      const bottom = contentInsetEndAdjustment.get();
+      if (bottom > 0) list.reportContentInset({ bottom });
+    }
   };
   const jumpIndex = jumpReady
     ? presentedFeed.findIndex((entry) => entry.type === "message" && entry.id === jumpToMessageId)
@@ -4069,7 +4105,8 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
       list.cancelScroll();
       list.anchorVisibleContent({ key: anchorKey });
     }
-    if (list && anchorKey && !reduceMotion) {
+    // Harmony remeasures the list during each phase, delaying the newly revealed rows.
+    if (list && anchorKey && !reduceMotion && String(Platform.OS) !== "harmony") {
       const state = list.getState();
       const anchorIndex = state.indexByKey(anchorKey);
       if (anchorIndex !== undefined) {
@@ -4153,18 +4190,20 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     });
   };
 
-  const onToggleUserMessage = (rowId: string, anchorKey: string) => {
+  const onToggleUserMessage = (messageId: MessageId, anchorKey: string, expanded: boolean) => {
+    if (expanded) expandedUserMessages.add(messageId);
+    else expandedUserMessages.delete(messageId);
     const list = listRef.current;
-    if (expandedWorkRows[rowId] && list) {
+    if (!expanded && list) {
       const anchor = list.anchorVisibleContent({ key: anchorKey, hold: false });
       const nextKey = groupedFeed[groupedFeed.findIndex((item) => item.id === anchorKey) + 1]?.id;
       // Once the message top is scrolled away, collapse toward it like the web: what follows stays put.
       if (anchor && anchor.offset > 0 && nextKey) {
-        onToggleWorkRow(rowId, nextKey);
+        preserveDisclosurePosition(nextKey);
         return;
       }
     }
-    onToggleWorkRow(rowId, anchorKey);
+    preserveDisclosurePosition(anchorKey);
   };
 
   const onToggleTurnFold = (runId: RunId) => {
@@ -4306,6 +4345,7 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             onCopyWorkRow,
             onToggleWorkGroup,
             onToggleWorkRow,
+            expandedUserMessages,
             onToggleUserMessage,
             onToggleTurnFold,
             onOpenTurnDiff,
@@ -4361,6 +4401,19 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
     );
   }
 
+  const ConversationList = props.reservesComposerViewport
+    ? AnimatedLegendList<(typeof groupedFeed)[number]>
+    : KeyboardAwareLegendList<(typeof groupedFeed)[number]>;
+  const showLoadingPlaceholder = threadFeedIsLoading({
+    presentation: props.contentPresentation.kind,
+    hasRows: presentedFeed.length > 0,
+    isPositioningRows: settling,
+  });
+  const showEmptyPlaceholder =
+    presentedFeed.length === 0 &&
+    !props.worktreeSetup &&
+    props.activeWorkStartedAt === null &&
+    props.contentPresentation.kind === "ready";
   return (
     <PresentationSource identifier={fileShareSourceIdentifier} style={{ flex: 1 }}>
       <View className="flex-1" onLayout={handleViewportLayout}>
@@ -4371,22 +4424,28 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
           className="flex-1"
           style={splitLayout && viewportWidth > 0 ? { width: viewportWidth } : undefined}
         >
-          {/* oxlint-disable-next-line t3code/require-registered-list-scroll -- ThreadFeedScrollView is passed through the iOS-only spread below; the prop rejects undefined. */}
-          <KeyboardAwareLegendList
+          <ConversationList
             ref={attachList}
             dataKey={feedThreadKey}
             style={settling ? { flex: 1, opacity: 0 } : { flex: 1 }}
-            // RN 0.81+ drops inset-area touches (facebook/react-native#54123), making blank post-send space unscrollable.
-            applyWorkaroundForContentInsetHitTestBug
+            {...(props.reservesComposerViewport
+              ? {}
+              : {
+                  // RN 0.81+ drops inset-area touches (facebook/react-native#54123).
+                  applyWorkaroundForContentInsetHitTestBug: true,
+                  contentInsetEndAdjustment: props.contentInsetEndAdjustment,
+                  keyboardOffset: props.keyboardOffset,
+                  keyboardLiftBehavior: props.sendingWithKeyboard
+                    ? ("persistent" as const)
+                    : ("whenAtEnd" as const),
+                  freeze: props.freeze,
+                })}
             {...(Platform.OS === "ios" ? { ScrollViewComponent: ThreadFeedScrollView } : {})}
             contentInsetAdjustmentBehavior="never"
             automaticallyAdjustsScrollIndicatorInsets={usesNativeAutomaticInsets}
             scrollIndicatorInsets={{ top: anchorTopInset, bottom: 0 }}
             {...(anchoredEndSpace ? { anchoredEndSpace } : {})}
-            contentInsetEndAdjustment={props.contentInsetEndAdjustment}
-            keyboardOffset={props.keyboardOffset}
             {...(usesNativeAutomaticInsets ? { contentInset: { top: anchorTopInset } } : {})}
-            freeze={props.freeze}
             maintainScrollAtEnd={jumpReady ? false : THREAD_FEED_MAINTAIN_SCROLL_AT_END}
             maintainScrollAtEndThreshold={THREAD_FEED_MAINTAIN_SCROLL_AT_END_THRESHOLD}
             maintainVisibleContentPosition
@@ -4419,7 +4478,6 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             // Android scrolls a tapped selectable message into view when it takes focus, which reads
             // as a user scroll and drops end following before the keyboard closes.
             scrollsChildToFocus={false}
-            keyboardLiftBehavior={props.sendingWithKeyboard ? "persistent" : "whenAtEnd"}
             // Seed the initial viewport before native onLayout.
             {...(viewportHeight > 0 && viewportWidth > 0
               ? { estimatedListSize: { height: viewportHeight, width: viewportWidth } }
@@ -4482,19 +4540,20 @@ export const ThreadFeed = memo(function ThreadFeed(props: ThreadFeedProps) {
             }}
           />
         </View>
-        {presentedFeed.length === 0 &&
-        !props.worktreeSetup &&
-        props.activeWorkStartedAt === null &&
-        props.contentPresentation.kind === "ready" ? (
+        {showLoadingPlaceholder || showEmptyPlaceholder ? (
           <View
             pointerEvents="none"
             style={[StyleSheet.absoluteFill, { left: contentLeftInset, right: contentRightInset }]}
           >
             <ThreadFeedPlaceholder
-              title={gt("No conversation yet")}
-              detail={gt(
-                "Ask the agent to inspect the repo, run a command, or continue the active thread.",
-              )}
+              {...(showLoadingPlaceholder
+                ? { loading: true, title: m(THREAD_LOADING_MESSAGES) }
+                : {
+                    title: gt("No conversation yet"),
+                    detail: gt(
+                      "Ask the agent to inspect the repo, run a command, or continue the active thread.",
+                    ),
+                  })}
               topInset={topContentInset}
               bottomInset={bottomContentInset}
               horizontalPadding={horizontalPadding}

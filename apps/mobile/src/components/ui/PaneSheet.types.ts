@@ -1,7 +1,11 @@
-import type { ComponentProps } from "react";
-import type { FormSheet } from "react-native-screens";
+import type { ReactNode } from "react";
 
-export type PaneSheetProps = Omit<
-  ComponentProps<typeof FormSheet>,
-  "prefersGrabberVisible" | "preferredCornerRadius" | "nativeContainerStyle"
->;
+export interface PaneSheetProps {
+  readonly children: ReactNode;
+  readonly isOpen: boolean;
+  readonly detents: number[];
+  readonly prefersHorizontalBars?: boolean;
+  readonly preventNativeDismiss?: boolean;
+  readonly onDismiss: () => void;
+  readonly onNativeDismiss: () => void;
+}

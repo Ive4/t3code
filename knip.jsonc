@@ -116,6 +116,8 @@
       "ignoreDependencies": ["@astrojs/check"],
     },
     "apps/harmonyos": {
+      // The bundle script resolves React DOM dynamically for the native runtime.
+      "ignoreDependencies": ["react-dom"],
       // DevEco Studio loads the Hvigor files and supplies their native plugins.
       "ignore": [
         "hvigorfile.ts",
@@ -130,6 +132,7 @@
         "scripts/shared-harmony-transformer.cjs",
         "src/shared/index.js",
         "src/shared/terminal/page.js",
+        "src/shared/terminal/surface.js",
         "src/shared/ports/*.harmony.js",
       ],
     },

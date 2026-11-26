@@ -11,10 +11,13 @@ import {
 import { currentWorkspaceSelections } from "../layout/workspace/workspace-selection-store";
 import { rememberedSettingsPage } from "../layout/workspace/workspace-tab-navigation";
 import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
-import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
+import { useWorkspaceListSearch } from "../layout/workspace/useWorkspaceListSearch";
+import { WorkspaceTabsProvider, useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import type { AppBarSearch } from "../../components/ui/AppBar.types";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { useAuth, useUser } from "@clerk/expo";
+import { useAtomValue } from "@effect/atom-react";
 import { useNavigation, useNavigationState } from "@react-navigation/native";
 import { use, type ComponentProps } from "react";
 import { Platform, View } from "react-native";
@@ -23,6 +26,11 @@ import { deriveProjectGroupLabel } from "@t3tools/client-runtime/state/project-g
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import {
+  harmonyAgentNotifications,
+  harmonyPushConfigured,
+  harmonyPushRegistrationStateAtom,
+} from "../agent-awareness/harmonyAgentNotifications";
 import { useAdaptiveWorkspaceLayout } from "../layout/adaptive-workspace-context";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { SettingsRow } from "./components/SettingsRow";
@@ -37,7 +45,20 @@ import { useGT, useMessages } from "gt-react-native";
 
 export function SettingsRouteScreen() {
   const list = useSettingsListPlacement();
-  return <SettingsListScreen sidebar={list.sidebar} selected={list.selected} />;
+  const workspace = useWorkspaceTabs();
+  return workspace ? (
+    <SettingsListScreen {...list} workspaceRoot />
+  ) : (
+    <WorkspaceTabsProvider>
+      <StandaloneSettingsList {...list} />
+    </WorkspaceTabsProvider>
+  );
+}
+
+function StandaloneSettingsList(props: ComponentProps<typeof SettingsListScreen>) {
+  const gt = useGT();
+  const search = useWorkspaceListSearch("settings", gt("Search settings"));
+  return <SettingsListScreen {...props} search={search} />;
 }
 
 /** The Settings list inside a workspace shell that draws its bar, title and search itself. */
@@ -73,6 +94,8 @@ function SettingsListContent() {
 export function SettingsListScreen(props: {
   readonly sidebar: boolean;
   readonly selected: string | null;
+  readonly workspaceRoot?: boolean;
+  readonly search?: AppBarSearch;
 }) {
   const gt = useGT();
   const workspace = useWorkspaceTabs();
@@ -82,17 +105,18 @@ export function SettingsListScreen(props: {
       <View className="flex-1 bg-screen">
         <SettingsScreen
           title={gt("Settings")}
-          workspaceRoot={props.sidebar}
+          workspaceRoot={props.sidebar || (props.workspaceRoot ?? false)}
           menus={[environmentMenu]}
           search={
-            workspace
+            props.search ??
+            (workspace
               ? {
                   value: workspace.state.tabs.settings.query,
                   onChangeText: (query) =>
                     workspace.dispatch({ type: "query", tab: "settings", query }),
                   placeholder: gt("Search settings"),
                 }
-              : undefined
+              : undefined)
           }
         >
           <SettingsListContent />
@@ -115,8 +139,12 @@ function ConfiguredSettingsRouteScreen() {
   const { isLoaded, isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
   const { user } = useUser();
   const { savedConnectionsById } = useSavedRemoteConnections();
+  const isHarmony = String(Platform.OS) === "harmony";
+  const huaweiAccount = useHuaweiAccountRow();
   const accountLabel = !isLoaded
-    ? gt("Checking")
+    ? isHarmony
+      ? undefined
+      : gt("Checking")
     : !isSignedIn
       ? gt("Sign in")
       : (user?.primaryEmailAddress?.emailAddress ?? gt("Signed in"));
@@ -129,9 +157,10 @@ function ConfiguredSettingsRouteScreen() {
           icon: "person.crop.circle",
           label: gt("T3 Account"),
           value: accountLabel,
-          disabled: !isLoaded,
+          disabled: !isHarmony && !isLoaded,
           onPress: () => navigation.navigate("SettingsAuth"),
         },
+        ...(huaweiAccount ? [huaweiAccount] : []),
         environmentsRow(gt("Environments"), Object.keys(savedConnectionsById).length),
         {
           id: "SettingsNotifications",
@@ -146,12 +175,35 @@ function ConfiguredSettingsRouteScreen() {
 
 function LocalSettingsRouteScreen() {
   const gt = useGT();
+  const huaweiAccount = useHuaweiAccountRow();
   const { savedConnectionsById } = useSavedRemoteConnections();
-  return (
-    <SettingsList
-      connections={[environmentsRow(gt("Environments"), Object.keys(savedConnectionsById).length)]}
-    />
-  );
+  const connections: SettingsListRow[] = [
+    ...(huaweiAccount ? [huaweiAccount] : []),
+    environmentsRow(gt("Environments"), Object.keys(savedConnectionsById).length),
+  ];
+  if (harmonyAgentNotifications) {
+    connections.push({
+      id: "SettingsNotifications",
+      icon: "bell.badge",
+      label: gt("Notifications"),
+      target: "SettingsNotifications",
+    });
+  }
+  return <SettingsList connections={connections} />;
+}
+
+function useHuaweiAccountRow(): SettingsListRow | null {
+  const gt = useGT();
+  const { session } = useAtomValue(harmonyPushRegistrationStateAtom);
+  if (!harmonyPushConfigured) return null;
+  return {
+    id: "SettingsHuaweiAccount",
+    icon: "person.crop.circle",
+    label: gt("Huawei Account"),
+    value:
+      session === "signedIn" ? gt("Signed in") : session === "checking" ? undefined : gt("Sign in"),
+    target: "SettingsHuaweiAccount",
+  };
 }
 
 function environmentsRow(label: string, count: number): SettingsListRow {
@@ -186,6 +238,7 @@ function SettingsList(props: { readonly connections: readonly SettingsListRow[] 
       ...indexSections,
     ],
     query,
+    Platform.OS,
     m,
   );
 

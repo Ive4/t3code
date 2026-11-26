@@ -373,6 +373,7 @@ export interface ManagedRelayClientLayerOptions {
   readonly relayUrl: string;
   readonly clientId: RelayPublicClientId;
   readonly accessTokenStore?: ManagedRelayAccessTokenStore;
+  readonly retryEnvironmentListingOnTimeout?: boolean;
 }
 
 export class ManagedRelayClient extends Context.Service<
@@ -855,13 +856,16 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
     relayUrl,
     listEnvironments: Effect.fnUntraced(
       function* (input) {
-        return yield* client.client
+        const request = client.client
           .listEnvironments({ headers: bearerHeaders(input.clerkToken) })
           .pipe(
             Effect.map((response) => response.environments),
             Effect.mapError(relayRequestError("list relay-managed environments")),
             timeoutRelayRequest("Relay environment listing"),
           );
+        return yield* options.retryEnvironmentListingOnTimeout
+          ? request.pipe(Effect.catchTags({ ManagedRelayRequestTimeoutError: () => request }))
+          : request;
       },
       Effect.withSpan("clientRuntime.managedRelay.listEnvironments"),
       withRelayClientTracing,

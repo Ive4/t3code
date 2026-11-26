@@ -1,6 +1,6 @@
 import { T, useGT } from "gt-react-native";
 import { useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -15,15 +15,23 @@ import { isPdfPreviewUri } from "../../lib/pdfPreview";
 import { webViewDecelerationRate } from "../../lib/webViewDecelerationRate";
 import { useContentTopInset } from "../../components/ui/useBarInset";
 
-export function WorkspaceFileWebPreview(props: { readonly uri: string | null }) {
+export function WorkspaceFileWebPreview(props: {
+  readonly uri: string | null;
+  readonly allowWebFrames?: boolean;
+}) {
   const gt = useGT();
   if (props.uri === null) {
     return <FilePreviewLoading message={gt("Preparing preview...")} background="card" />;
   }
-  return <DocumentWebPreview key={props.uri} uri={props.uri} />;
+  return (
+    <DocumentWebPreview key={props.uri} uri={props.uri} allowWebFrames={props.allowWebFrames} />
+  );
 }
 
-function DocumentWebPreview(props: { readonly uri: string }) {
+function DocumentWebPreview(props: {
+  readonly uri: string;
+  readonly allowWebFrames?: boolean | undefined;
+}) {
   const headerInset = useContentTopInset();
   const gt = useGT();
   const [loadProgress, setLoadProgress] = useState(0);
@@ -43,6 +51,11 @@ function DocumentWebPreview(props: { readonly uri: string }) {
     );
   }
 
+  const source = {
+    uri: props.uri,
+    ...(String(Platform.OS) === "harmony" && props.allowWebFrames && { harmonyWebFrames: true }),
+  };
+
   return (
     <View className="relative flex-1 bg-card">
       {linkedPdf ? (
@@ -59,7 +72,7 @@ function DocumentWebPreview(props: { readonly uri: string }) {
       ) : null}
       <View className="flex-1" style={linkedPdf ? { display: "none" } : undefined}>
         <WebView
-          source={{ uri: props.uri }}
+          source={source}
           // react-native-webview defaults to "never", which starts the page under the header.
           contentInsetAdjustmentBehavior="automatic"
           decelerationRate={webViewDecelerationRate}

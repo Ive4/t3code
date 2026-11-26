@@ -907,7 +907,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
                     if (isSubmissionLocked) return;
                     pendingNativeImagePasteCountRef.current += 1;
                     setPendingNativeImageCount((count) => count + uris.length);
-                    void nativeImageSubmit.pasteImages(uris).finally(() => {
+                    return nativeImageSubmit.pasteImages(uris).finally(() => {
                       pendingNativeImagePasteCountRef.current -= 1;
                       setPendingNativeImageCount((count) => count - uris.length);
                     });

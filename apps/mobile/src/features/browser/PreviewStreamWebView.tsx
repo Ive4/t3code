@@ -329,7 +329,7 @@ function PreviewStreamDocumentView({
       previewStreamScript,
       gt("Browser viewer stopped unexpectedly."),
     ),
-    baseUrl: Platform.OS === "android" ? "https://localhost/" : "file:///",
+    baseUrl: ["android", "harmony"].includes(Platform.OS) ? "https://localhost/" : "file:///",
   };
   useImperativeHandle(ref, () => ({
     command,

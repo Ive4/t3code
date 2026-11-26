@@ -7,10 +7,7 @@ import { msg, useMessages } from "gt-react-native";
 import { m } from "../i18n/messages";
 import { filePreviewDelimiter, parseDelimitedPreview } from "@t3tools/shared/delimitedPreview";
 import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
-import { readFilePreviewResponse } from "@t3tools/client-runtime/file-preview";
 import { filePreviewKind, FILE_TEXT_PREVIEW_MAX_BYTES } from "@t3tools/shared/filePreview";
-import { fetch } from "expo/fetch";
-import { File } from "expo-file-system";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -21,6 +18,7 @@ import { localAttachmentPreviewAtom, localAttachmentPreviewState } from "./local
 import { downloadAndShareAttachment, shareLocalAttachment } from "./attachmentDownload";
 import { refreshAssetUrl, useFreshAssetUrl, useRefreshAssetUrl } from "../state/assets";
 import { attachmentDocumentPresentation } from "./attachmentDocumentPresentation";
+import { readLocalAttachmentText, readRemoteAttachmentText } from "./attachmentTextTransport";
 
 const isLocalUri = (uri: string) => /^(file|content):/.test(uri);
 
@@ -39,7 +37,7 @@ interface AttachmentTextKey {
 
 async function readAttachmentText(key: AttachmentTextKey, signal: AbortSignal) {
   if (isLocalUri(key.uri)) {
-    return readFilePreviewResponse({ ok: true, body: new File(key.uri).readableStream() }, signal);
+    return readLocalAttachmentText(key.uri, signal);
   }
   // Reauthorize before source reads; the opening URL may have expired.
   let target = key.uri;
@@ -51,14 +49,11 @@ async function readAttachmentText(key: AttachmentTextKey, signal: AbortSignal) {
     if (!refreshed) throw new Error(m(msg("Reconnect to this environment and try again.")));
     target = refreshed;
   }
-  const response = await fetch(target, {
-    signal,
-    headers: {
-      ...(key.sizeBytes > 0 ? { Range: `bytes=0-${FILE_TEXT_PREVIEW_MAX_BYTES}` } : {}),
-      ...(key.revision > 0 ? { "Cache-Control": "no-cache" } : {}),
-    },
-  });
-  return readFilePreviewResponse(response, signal);
+  const headers = {
+    ...(key.sizeBytes > 0 ? { Range: `bytes=0-${FILE_TEXT_PREVIEW_MAX_BYTES}` } : {}),
+    ...(key.revision > 0 ? { "Cache-Control": "no-cache" } : {}),
+  };
+  return readRemoteAttachmentText(target, headers, signal);
 }
 
 class AttachmentTextReadError extends Schema.TaggedError<AttachmentTextReadError>()(

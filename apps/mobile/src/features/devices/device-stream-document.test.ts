@@ -1,9 +1,19 @@
 import * as NodeVM from "node:vm";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { deviceStreamDocument, deviceStreamMessage } from "./device-stream-document";
+import {
+  deviceStreamBaseUrl,
+  deviceStreamDocument,
+  deviceStreamMessage,
+} from "./device-stream-document";
 
 describe("native device stream document", () => {
+  it("uses secure WebCodecs and same-origin MJPEG documents in ArkWeb", () => {
+    const environment = "http://10.0.0.2:1234/device";
+    expect(deviceStreamBaseUrl("harmony", "android", environment)).toBe("https://localhost/");
+    expect(deviceStreamBaseUrl("harmony", "ios", environment)).toBe("http://10.0.0.2:1234/");
+  });
+
   it("keeps ticket and device values from terminating the embedded script", () => {
     const deviceId = '</script><script>alert("device")</script>';
     const configuration = JSON.stringify({ deviceId, ticket: "<ticket>" });

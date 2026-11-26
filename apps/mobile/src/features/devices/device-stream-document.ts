@@ -24,11 +24,11 @@ export interface DeviceStreamConfiguration {
 }
 
 export function deviceStreamBaseUrl(
-  viewerPlatform: PlatformOSType,
+  viewerPlatform: PlatformOSType | "harmony",
   devicePlatform: DevicePlatform,
   httpBase: string,
 ) {
-  if (viewerPlatform !== "android") return "file:///";
+  if (viewerPlatform !== "android" && viewerPlatform !== "harmony") return "file:///";
   // Android targets stream through WebCodecs, which needs a secure context. iOS targets
   // stream an MJPEG image from the environment, which a synthetic https document blocks as
   // mixed content on plain-http environments even with mixedContentMode="always".

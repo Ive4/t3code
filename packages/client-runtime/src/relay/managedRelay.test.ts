@@ -7,6 +7,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 
 import { RELAY_GATEWAY_TIMEOUT_MESSAGE, relayRequestFailureDetail } from "./errorPresentation.ts";
 import * as ManagedRelay from "./managedRelay.ts";
@@ -16,6 +17,7 @@ function layerManagedRelayTest(
   fetchFn: typeof globalThis.fetch,
   relayUrl = "https://relay.example.test",
   accessTokenStore?: ManagedRelay.ManagedRelayAccessTokenStore,
+  retryEnvironmentListingOnTimeout = false,
 ) {
   const layerHttpClient = RpcHttp.layerRemoteHttpClient(fetchFn);
   const layerSigner = Layer.succeed(
@@ -30,6 +32,7 @@ function layerManagedRelayTest(
     relayUrl,
     clientId: "t3-mobile",
     ...(accessTokenStore ? { accessTokenStore } : {}),
+    retryEnvironmentListingOnTimeout,
   }).pipe(Layer.provide(layerSigner), Layer.provide(layerHttpClient));
 }
 
@@ -40,6 +43,43 @@ function clerkToken(subject: string, nonce: string): string {
 }
 
 describe("ManagedRelayClient", () => {
+  it.effect.each([true, false])(
+    "handles a listing timeout with automatic retry set to %s",
+    (retry) => {
+      const firstRequest = Promise.withResolvers<void>();
+      let requests = 0;
+      const fetchFn = (() => {
+        requests += 1;
+        if (requests === 1) {
+          firstRequest.resolve();
+          return new Promise<Response>(() => {});
+        }
+        return Promise.resolve(Response.json({ environments: [] }));
+      }) satisfies typeof globalThis.fetch;
+
+      return Effect.gen(function* () {
+        const client = yield* ManagedRelay.ManagedRelayClient;
+        const listing = yield* client
+          .listEnvironments({ clerkToken: "clerk-token" })
+          .pipe(Effect.result, Effect.forkChild);
+        yield* Effect.promise(() => firstRequest.promise);
+        yield* TestClock.adjust(ManagedRelay.MANAGED_RELAY_REQUEST_TIMEOUT_MS);
+        const result = yield* Fiber.join(listing);
+
+        if (retry) {
+          expect(result).toMatchObject({ _tag: "Success", success: [] });
+          expect(requests).toBe(2);
+        } else {
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: { _tag: "ManagedRelayRequestTimeoutError" },
+          });
+          expect(requests).toBe(1);
+        }
+      }).pipe(Effect.provide(layerManagedRelayTest(fetchFn, undefined, undefined, retry)));
+    },
+  );
+
   it.effect("rejects unsafe relay URLs before sending credentials", () => {
     let requestCount = 0;
     const fetchFn = (() => {

@@ -1,0 +1,97 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Microsoft YaHei UI", sans-serif;
+  background: light-dark(#eef1f6, #161c27);
+  color: light-dark(#141e2e, #eef3fc);
+  --panel: light-dark(#fff, #202939);
+  --border: light-dark(#d8dfeb, #39465b);
+  --muted: light-dark(#4e5b71, #a9b9d4);
+  --accent: light-dark(#174bbd, #9cbcff);
+  --accent-text: light-dark(#fff, #141e2e);
+}
+
+body {
+  margin: 0;
+}
+main {
+  max-width: 42rem;
+  margin: 10vh auto 0;
+  padding: 1.25rem;
+}
+h1 {
+  margin: 0 0 1.5rem;
+  font-size: clamp(1.6rem, 5vw, 2.35rem);
+  letter-spacing: -0.025em;
+}
+h2 {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+}
+p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+section {
+  padding: 1.25rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+section + section {
+  margin-top: 0.65rem;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+button {
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+button.secondary {
+  border-color: var(--border);
+  color: inherit;
+  background: transparent;
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.authorization {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-top: 1.1rem;
+}
+.authorization img {
+  border-radius: 0.35rem;
+}
+.authorization a {
+  color: var(--accent);
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+.feedback {
+  padding: 1rem 0;
+}
+.feedback button {
+  margin-top: 0.6rem;
+}
+[hidden] {
+  display: none !important;
+}

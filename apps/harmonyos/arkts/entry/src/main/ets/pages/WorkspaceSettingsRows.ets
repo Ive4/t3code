@@ -86,7 +86,9 @@ struct SettingsRow {
         } else if (this.item.kind === 'choice') {
           this.ChoiceIndicator()
         } else if (this.item.kind === 'switch') {
-          Toggle({ type: ToggleType.Switch }).enabled(false)
+          Toggle({ type: ToggleType.Switch, isOn: this.item.selected ?? false })
+            .enabled(!this.item.disabled)
+            .hitTestBehavior(HitTestMode.None)
         }
       }
       .width('100%')
@@ -104,7 +106,7 @@ struct SettingsRow {
     .accessibilityText(this.accessibilityLabel())
     .accessibilitySelected(this.item.selected ?? false)
     .enabled(!this.item.disabled && (this.item.kind === 'link' ||
-      (this.item.kind === 'choice' && this.item.selected !== undefined)))
+      ((this.item.kind === 'choice' || this.item.kind === 'switch') && this.item.selected !== undefined)))
     .onClick(() => this.onSelect(this.item))
   }
 }

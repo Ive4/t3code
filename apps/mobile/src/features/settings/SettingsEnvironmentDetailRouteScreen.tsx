@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { m } from "../../i18n/messages";
 
 import { AppText as Text } from "../../components/ui/AppText";
+import { ContentStatus } from "../../components/ui/ContentBand";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
 import { appAtomRegistry } from "../../state/atom-registry";
@@ -31,6 +32,7 @@ import { serverEnvironment } from "../../state/server";
 import { environmentSession, useEnvironmentScope, readEnvironmentScope } from "../../state/session";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
+import { useConnectionsReady } from "../../state/workspace";
 import { ConnectionEnvironmentRow } from "../connection/ConnectionEnvironmentRow";
 import { EnvironmentRoutesSection } from "./EnvironmentRoutesSection";
 import { OutdatedServerUpdateSection } from "./OutdatedServerUpdateSection";
@@ -63,6 +65,7 @@ function EnvironmentDetail({ environmentId }: { readonly environmentId: Environm
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const connections = useRemoteConnections();
+  const connectionsReady = useConnectionsReady();
   const environment = connections.connectedEnvironments.find(
     (entry) => entry.environmentId === environmentId,
   );
@@ -198,7 +201,9 @@ function EnvironmentDetail({ environmentId }: { readonly environmentId: Environm
         contentContainerClassName="gap-6 px-5 pt-4"
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
       >
-        {!environment ? (
+        {!environment && !connectionsReady ? (
+          <ContentStatus loading detail={gt("Loading environments")} />
+        ) : !environment ? (
           <Text className="text-base text-foreground-muted">
             <T>This environment is no longer saved on this device.</T>
           </Text>

@@ -15,7 +15,12 @@ import { useEnvironments } from "../../state/environments";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { BrowserChrome } from "./BrowserBar";
 import { loopbackUrlForDevice } from "./browserTabs";
-import { TunnelWebView, type TunnelNavigation, type TunnelWebViewRef } from "./TunnelWebView";
+import {
+  supportsNativePreviewTunnel,
+  TunnelWebView,
+  type TunnelNavigation,
+  type TunnelWebViewRef,
+} from "./TunnelWebView";
 
 type LocalPreviewRouteScreenProps = StaticScreenProps<{
   readonly environmentId: string;
@@ -59,6 +64,7 @@ export function LocalPreviewScreen(props: {
   const [outdated, setOutdated] = useState(false);
   const [debug, setDebug] = useState<string | undefined>(undefined);
   const [unsupported, setUnsupported] = useState<string | null>(null);
+  const unavailable = !supportsNativePreviewTunnel || unsupported !== null;
   // After a failed load the webview reports no URL, so the address stays on the one asked for.
   const current = (!failed && page?.url) || requested;
 
@@ -79,7 +85,7 @@ export function LocalPreviewScreen(props: {
   };
   const back = () => void webView.current?.goBack();
   const canGoBack = page?.canGoBack ?? false;
-  const pageColor = failed || tunnelOff || unsupported !== null ? null : page?.pageColor || null;
+  const pageColor = failed || tunnelOff || unavailable ? null : page?.pageColor || null;
 
   return (
     // Full screen spans the Duo's rail, so it insets its own sides; the pane is inset already.
@@ -93,7 +99,7 @@ export function LocalPreviewScreen(props: {
         holdExpanded={failed}
         bar={{
           url: current,
-          editable: true,
+          editable: supportsNativePreviewTunnel,
           canGoBack,
           onClose: props.onClose,
           onBack: back,
@@ -146,7 +152,7 @@ export function LocalPreviewScreen(props: {
                   />
                 </View>
               </View>
-            ) : unsupported !== null ? (
+            ) : unavailable ? (
               <View
                 className="absolute inset-0 items-center justify-center"
                 style={{ backgroundColor: themeVariables["--color-sheet-solid"] }}
@@ -156,8 +162,8 @@ export function LocalPreviewScreen(props: {
                     variant="plain"
                     title={gt("This device can't open localhost pages")}
                     detail={gt("{reason} You can still use the streamed browser for this tab.", {
-                      reason: unsupported,
-                    })}
+                      reason: unsupported ?? "",
+                    }).trim()}
                   />
                 </View>
               </View>

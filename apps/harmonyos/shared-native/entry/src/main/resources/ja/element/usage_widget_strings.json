@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "サブスクリプションの残量"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "更新するには T3 を開いてください"
+    }
+  ]
+}

@@ -67,7 +67,7 @@ export function SettingsFollowUpRouteScreen() {
       <Text className="px-2 text-sm text-foreground-muted">
         <T>
           Long-press the send button to use the other option for a single message. With a hardware
-          keyboard, hold <Var>{Platform.OS === "android" ? "Ctrl" : "Command"}</Var> while sending.
+          keyboard, hold <Var>{Platform.OS === "ios" ? "Command" : "Ctrl"}</Var> while sending.
         </T>
       </Text>
     </ScrollView>

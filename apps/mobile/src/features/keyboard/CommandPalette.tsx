@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   Text as NativeText,
   TextInput,
@@ -76,6 +77,7 @@ import { parseActiveThreadPath, type HardwareKeyboardCommand } from "./hardwareK
 import { threadJumpIndex } from "./threadKeyboardShortcuts";
 import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 import { openSettings } from "../settings/settings-navigation";
+import { appearanceSettingsAvailable } from "../settings/components/settings-page-targets";
 import { useSelectWorkspaceTab } from "../layout/workspace/useSelectWorkspaceTab";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 
@@ -320,13 +322,17 @@ export function CommandPalette(props: {
         searchTerms: ["preferences", "configuration"],
         run: () => selectTab("settings"),
       },
-      {
-        key: "appearance",
-        kind: "action",
-        title: gt("Appearance"),
-        searchTerms: ["theme", "colors", "dark", "light"],
-        run: () => openSettings(navigation, "SettingsAppearance"),
-      },
+      ...(appearanceSettingsAvailable(Platform.OS)
+        ? [
+            {
+              key: "appearance",
+              kind: "action" as const,
+              title: gt("Appearance"),
+              searchTerms: ["theme", "colors", "dark", "light"],
+              run: () => openSettings(navigation, "SettingsAppearance"),
+            },
+          ]
+        : []),
       {
         key: "environments",
         kind: "action",

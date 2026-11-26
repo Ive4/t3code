@@ -1724,7 +1724,7 @@ describe("buildThreadListV2ListItems row-state stamps", () => {
   });
 });
 
-describe("Working section beta", () => {
+describe("Prioritized chats", () => {
   const running = {
     status: "running" as const,
     activeRunId: null,
@@ -1738,6 +1738,7 @@ describe("Working section beta", () => {
       id: ThreadId.make(id),
       title: id,
       createdAt: "2026-06-01T00:00:00.000Z",
+      lastVisitedAt: null,
       latestRun: {
         runId: RunId.make(`run-${id}`),
         status: "completed",
@@ -1781,12 +1782,12 @@ describe("Working section beta", () => {
     const layout = build();
     expect(ids(layout)).toEqual([
       "pinned-working",
-      "finished-late",
       "asks-approval",
+      "finished-late",
       "finished-early",
     ]);
     expect(layout.workingCount).toBe(1);
-    expect(layout.workingShelfHeaderIndex).toBe(4);
+    expect(layout.workingShelfHeaderIndex).toBe(2);
 
     const off = build({ workingShelfEnabled: false });
     expect(ids(off)).toContain("working");
@@ -1826,13 +1827,25 @@ describe("Working section beta", () => {
       inboxReturnAt: (thread) =>
         thread.id === "finished-early" ? Date.parse("2026-06-01T04:00:00.000Z") : undefined,
     });
-    expect(ids(layout).slice(1)).toEqual(["finished-early", "finished-late", "asks-approval"]);
+    expect(ids(layout).slice(1)).toEqual(["asks-approval", "finished-early", "finished-late"]);
   });
 
-  it("places the shelf after queued tasks and before snoozed and settled threads", () => {
+  it("puts requests, working threads and unread results above read threads and history", () => {
+    const unread = finishedAt("unread", "2026-06-01T03:00:00.000Z");
+    const opened = {
+      ...finishedAt("opened", "2026-06-01T04:00:00.000Z"),
+      lastVisitedAt: "2026-06-01T05:00:00.000Z",
+    };
     const layout = buildThreadListV2Items({
       threads: [
-        makeThread({ id: ThreadId.make("active"), title: "active" }),
+        opened,
+        unread,
+        makeThread({
+          id: ThreadId.make("input"),
+          title: "input",
+          hasPendingUserInput: true,
+          runtime: running,
+        }),
         makeThread({ id: ThreadId.make("working"), title: "working", runtime: running }),
         makeThread({
           id: ThreadId.make("snoozed"),
@@ -1856,16 +1869,10 @@ describe("Working section beta", () => {
       snoozedShelfExpanded: true,
     });
     const items = buildThreadListV2ListItems({
-      items: layout.items,
+      ...layout,
       pendingTasks: [makePendingTask("queued")],
-      workingCount: layout.workingCount,
       workingShelfExpanded: true,
-      workingShelfHeaderIndex: layout.workingShelfHeaderIndex,
-      snoozedCount: layout.snoozedCount,
       snoozedShelfExpanded: true,
-      snoozedShelfHeaderIndex: layout.snoozedShelfHeaderIndex,
-      settledCount: layout.settledCount,
-      settledShelfHeaderIndex: layout.settledShelfHeaderIndex,
     });
     expect(
       items.map((item) =>
@@ -1873,18 +1880,62 @@ describe("Working section beta", () => {
           ? item.item.thread.id
           : item.type === "v2-pending"
             ? item.pendingTask.title
-            : item.type,
+            : item.type === "v2-inbox-heading"
+              ? item.section
+              : item.type,
       ),
     ).toEqual([
-      "queued",
-      "active",
+      "attention",
+      "input",
       "v2-working-shelf",
       "working",
+      "unread",
+      "unread",
+      "queued",
+      "recent",
+      "opened",
       "v2-snoozed-shelf",
       "snoozed",
       "v2-settled-shelf",
       "settled",
     ]);
+  });
+
+  it("moves a result behind unread results after it is opened", () => {
+    const earlier = finishedAt("earlier", "2026-06-01T01:00:00.000Z");
+    const later = finishedAt("later", "2026-06-01T03:00:00.000Z");
+
+    expect(ids(build({ threads: [earlier, later] }))).toEqual(["later", "earlier"]);
+    expect(
+      ids(
+        build({
+          threads: [earlier, { ...later, lastVisitedAt: later.latestRun?.completedAt }],
+        }),
+      ),
+    ).toEqual(["earlier", "later"]);
+  });
+
+  it("surfaces a failed run once and leaves a plan waiting for review above running work", () => {
+    const finished = finishedAt("errored", "2026-06-01T03:00:00.000Z");
+    const failed = makeThread({
+      ...finished,
+      runtime: { ...running, status: "failed" },
+      latestRun: { ...finished.latestRun!, status: "failed" },
+    });
+    const plan = makeThread({
+      ...finishedAt("plan", "2026-06-01T02:00:00.000Z"),
+      interactionMode: "plan",
+      hasActionableProposedPlan: true,
+    });
+    const working = makeThread({
+      id: ThreadId.make("running"),
+      title: "running",
+      runtime: running,
+    });
+    const order = (error: EnvironmentThreadShell) =>
+      ids(build({ threads: [working, error, plan], workingShelfExpanded: true }));
+    expect(order(failed)).toEqual(["errored", "plan", "running"]);
+    expect(order({ ...failed, lastVisitedAt: NOW })).toEqual(["plan", "running", "errored"]);
   });
 });
 

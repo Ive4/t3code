@@ -94,7 +94,7 @@ export class FileSystemModule extends UITurboModule {
     return path;
   }
 
-  private readablePath(uri: string): string {
+  public readablePath(uri: string): string {
     return isGrantedUri(uri) ? uri : this.sandboxPath(uri, false);
   }
 

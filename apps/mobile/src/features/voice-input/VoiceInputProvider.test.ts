@@ -1,8 +1,10 @@
 import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 
+const platform = vi.hoisted(() => ({ OS: "ios" }));
+
 vi.mock("react-native", () => ({
-  Platform: { OS: "ios" },
+  Platform: platform,
   AppState: { addEventListener: () => ({ remove() {} }) },
 }));
 vi.mock("react-native-reanimated", () => ({ makeMutable: () => ({ set() {} }) }));
@@ -38,8 +40,30 @@ import { setAudioModeAsync } from "expo-audio";
 import type { MicrophoneEntry } from "../../lib/microphonePriority";
 import { createVoiceRecorder } from "../../native/voiceRecorder";
 import { mobilePreferencesAtom } from "../../state/preferences";
-import { localVoiceTranscriberAtom, voiceInputAtom } from "./VoiceInputProvider";
+import {
+  localVoiceTranscriberAtom,
+  voiceInputAtom,
+  voiceInputAvailableAtom,
+} from "./VoiceInputProvider";
 import { createVoiceInputTarget } from "./voiceInputSession";
+
+it.each([
+  ["android", true],
+  ["harmony", false],
+])("reports app dictation availability on %s", (os, expected) => {
+  const registry = AtomRegistry.make();
+  const originalPlatform = platform.OS;
+  platform.OS = os;
+  try {
+    registry.set(localVoiceTranscriberAtom, {
+      prepare: async () => ({ locale: "zh-CN", transcribe: async () => "" }),
+    });
+    expect(registry.get(voiceInputAvailableAtom)).toBe(expected);
+  } finally {
+    platform.OS = originalPlatform;
+    registry.dispose();
+  }
+});
 
 it("uses the loaded microphone order when recording starts before preferences hydrate", async () => {
   const registry = AtomRegistry.make();

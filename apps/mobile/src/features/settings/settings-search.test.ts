@@ -28,8 +28,8 @@ const SECTIONS = [
   },
 ];
 
-function visible(query: string) {
-  return filterSettingsSections(SECTIONS, query).map((section) => [
+function visible(query: string, platform = "android") {
+  return filterSettingsSections(SECTIONS, query, platform).map((section) => [
     section.title ?? null,
     section.rows.map((row) => row.label),
   ]);
@@ -65,6 +65,20 @@ describe("filterSettingsSections", () => {
   });
 
   it("drops sections that start empty", () => {
-    expect(filterSettingsSections([{ rows: [] }, ...SECTIONS], "").length).toBe(SECTIONS.length);
+    expect(filterSettingsSections([{ rows: [] }, ...SECTIONS], "", "android").length).toBe(
+      SECTIONS.length,
+    );
+  });
+
+  it("omits Appearance from the HarmonyOS settings list", () => {
+    expect(visible("", "harmony")).toContainEqual(["Interface", ["Keyboard", "Voice"]]);
+  });
+
+  it.each(["appearance", "dark mode"])("omits %s from HarmonyOS settings search", (query) => {
+    expect(visible(query, "harmony")).toEqual([]);
+  });
+
+  it("keeps Appearance in iOS settings search", () => {
+    expect(visible("appearance", "ios")).toEqual([["Interface", ["Appearance"]]]);
   });
 });

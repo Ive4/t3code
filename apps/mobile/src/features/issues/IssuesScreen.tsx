@@ -43,6 +43,7 @@ import { useDebouncedValue } from "../../state/queries";
 import { environmentServerConfigsAtom } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useWorkspaceState } from "../../state/workspace";
+import { isWorkspaceCatalogPending } from "../../state/workspaceModel";
 import { ListFilterMenu } from "../layout/workspace/ListFilterMenu";
 import { useSearchScrollRestoration } from "../layout/workspace/useSearchScrollRestoration";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
@@ -112,7 +113,7 @@ export function IssuesScreen(
   const messages = useMessages();
   const primaryColumn = use(NativePrimaryColumnContext);
   const workspace = useWorkspaceTabs()!;
-  const { environments } = useWorkspaceState();
+  const { environments, state: workspaceState } = useWorkspaceState();
   const configs = useAtomValue(environmentServerConfigsAtom);
   const projects = useProjects();
   const insets = useSafeAreaInsets();
@@ -156,6 +157,11 @@ export function IssuesScreen(
     .map((environment) => ({ environmentId: environment.environmentId, input: listInput }))
     .sort((left, right) => left.environmentId.localeCompare(right.environmentId));
   const list = useIssueList(targets);
+  const isLoadingList =
+    workspaceState.isLoadingConnections ||
+    (workspaceState.networkStatus !== "offline" &&
+      ((list.isPending && list.answers.length === 0) ||
+        (targets.length === 0 && !list.error && isWorkspaceCatalogPending(workspaceState))));
 
   const [pages, setPages] = useState<ReadonlyMap<EnvironmentId, HeldIssuePage>>(new Map());
   const held = holdIssuePages(list.answers, pages);
@@ -484,9 +490,10 @@ export function IssuesScreen(
           ) : undefined
         }
         ListEmptyComponent={
-          list.isPending && list.answers.length === 0 ? (
-            <View className="items-center py-12">
+          isLoadingList ? (
+            <View className="items-center gap-3 py-12">
               <AppActivityIndicator colorClassName="accent-icon" />
+              <Text className="text-sm text-foreground-muted">{gt("Loading…")}</Text>
             </View>
           ) : (
             <View className="px-8 py-12">

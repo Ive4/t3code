@@ -1,7 +1,16 @@
 {
   "string": [
-    { "name": "clerk_publishable_key", "value": "" },
-    { "name": "clerk_jwt_template", "value": "" },
-    { "name": "relay_url", "value": "" }
+    {
+      "name": "clerk_publishable_key",
+      "value": "pk_live_Y2xlcmsudDMuY29kZXMk"
+    },
+    {
+      "name": "clerk_jwt_template",
+      "value": "t3-relay"
+    },
+    {
+      "name": "relay_url",
+      "value": "https://relay.t3.codes"
+    }
   ]
 }

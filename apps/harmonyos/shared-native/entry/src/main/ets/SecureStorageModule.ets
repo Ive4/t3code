@@ -1,5 +1,15 @@
 import { relationalStore } from '@kit.ArkData';
+import { util } from '@kit.ArkTS';
+import { asset } from '@kit.AssetStoreKit';
 import { UITurboModule } from '@rnoh/react-native-openharmony';
+
+const ASSET_NOT_FOUND = 24000002;
+
+function privateAsset(key: string): asset.AssetMap {
+  const attributes: asset.AssetMap = new Map<asset.Tag, asset.Value>();
+  attributes.set(asset.Tag.ALIAS, new util.TextEncoder().encodeInto(key));
+  return attributes;
+}
 
 export class SecureStorageModule extends UITurboModule {
   private database: Promise<relationalStore.RdbStore> | undefined;
@@ -44,5 +54,35 @@ export class SecureStorageModule extends UITurboModule {
   public async deleteItem(key: string): Promise<void> {
     const database = await this.open();
     await database.executeSql('DELETE FROM secrets WHERE key = ?', [key]);
+  }
+
+  public setDeviceOnlyItem(key: string, value: string): void {
+    const attributes = privateAsset(key);
+    attributes.set(asset.Tag.SECRET, new util.TextEncoder().encodeInto(value));
+    attributes.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_UNLOCKED);
+    attributes.set(asset.Tag.SYNC_TYPE, asset.SyncType.NEVER);
+    attributes.set(asset.Tag.CONFLICT_RESOLUTION, asset.ConflictResolution.OVERWRITE);
+    asset.addSync(attributes);
+  }
+
+  public async getDeviceOnlyItem(key: string): Promise<string | null> {
+    const attributes = privateAsset(key);
+    attributes.set(asset.Tag.RETURN_TYPE, asset.ReturnType.ALL);
+    try {
+      const records = await asset.query(attributes);
+      const value = records[0]?.get(asset.Tag.SECRET);
+      return value instanceof Uint8Array ? util.TextDecoder.create('utf-8').decodeToString(value) : null;
+    } catch (error) {
+      if (error.code === ASSET_NOT_FOUND) return null;
+      throw new Error('Could not read the device-only value.');
+    }
+  }
+
+  public async deleteDeviceOnlyItem(key: string): Promise<void> {
+    try {
+      await asset.remove(privateAsset(key));
+    } catch (error) {
+      if (error.code !== ASSET_NOT_FOUND) throw new Error('Could not remove the device-only value.');
+    }
   }
 }

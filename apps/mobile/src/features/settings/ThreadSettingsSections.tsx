@@ -224,7 +224,7 @@ export function WorkingSectionSettings() {
       <SettingsSection title={gt("Sidebar")}>
         <SettingsSwitchRow
           icon="bolt.circle"
-          label={gt("Working section")}
+          label={gt("Prioritize chats")}
           value={workingShelfEnabled}
           onValueChange={(value) => {
             void savePreferences({ workingShelfEnabled: value });
@@ -233,9 +233,8 @@ export function WorkingSectionSettings() {
       </SettingsSection>
       <Text className="px-2 text-sm text-foreground-muted">
         <T>
-          Fold working and monitoring threads into a Working section. They return to the top of the
-          list when they need you. While this is on, active threads are ordered by time and cannot
-          be moved.
+          Put chats that need you first, followed by working threads and unread results. Turn this
+          off to arrange chats manually.
         </T>
       </Text>
     </View>

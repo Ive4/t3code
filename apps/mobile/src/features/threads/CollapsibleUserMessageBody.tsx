@@ -17,21 +17,22 @@ const isTallEnoughToFold = (height: number) => height >= FOLDED_HEIGHT * 2;
 
 export function CollapsibleUserMessageBody(props: {
   readonly collapsible: boolean;
-  readonly expanded: boolean;
-  readonly onToggle: () => void;
+  readonly readExpanded: () => boolean;
+  readonly onToggle: (expanded: boolean) => void;
   readonly bubbleColor: ColorValue;
   readonly children: ReactNode;
 }) {
   const gradientId = `user-message-fade-${useId().replaceAll(":", "")}`;
   const contentRef = useRef<ViewInstance>(null);
   const [tallEnough, setTallEnough] = useState(false);
+  const [expanded, setExpanded] = useState(props.readExpanded);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the fold depends on the rendered height; measuring before paint avoids one unfolded frame
   useLayoutEffect(() => {
     const height = contentRef.current?.getBoundingClientRect().height;
     if (height !== undefined) setTallEnough(isTallEnoughToFold(height));
   }, []);
   const canCollapse = props.collapsible && tallEnough;
-  const collapsed = canCollapse && !props.expanded;
+  const collapsed = canCollapse && !expanded;
 
   return (
     <View>
@@ -62,12 +63,16 @@ export function CollapsibleUserMessageBody(props: {
       {canCollapse ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ expanded: props.expanded }}
-          onPress={props.onToggle}
+          accessibilityState={{ expanded }}
+          onPress={() => {
+            const next = !expanded;
+            props.onToggle(next);
+            setExpanded(next);
+          }}
           className="mt-1.5 min-h-11 items-end justify-center active:opacity-70"
         >
           <Text className="font-t3-medium text-xs text-user-bubble-foreground-muted">
-            {props.expanded ? <T>Show less</T> : <T>Show full message</T>}
+            {expanded ? <T>Show less</T> : <T>Show full message</T>}
           </Text>
         </Pressable>
       ) : null}

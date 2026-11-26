@@ -2,6 +2,9 @@ import { common } from '@kit.AbilityKit';
 import { ComponentContent, PromptAction, window } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { fileIo, fileUri } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
+import { image } from '@kit.ImageKit';
+import { media } from '@kit.MediaKit';
 import { UITurboModule } from '@rnoh/react-native-openharmony';
 
 const DIALOG_CONTENT_NOT_FOUND = 103303;
@@ -80,7 +83,7 @@ class VideoDialog {
   }
 }
 
-async function videoSource(uri: string, context: common.UIAbilityContext): Promise<string> {
+export async function videoSource(uri: string, context: common.UIAbilityContext): Promise<string> {
   if (/^https?:\/\/[^/\s?#]+/i.test(uri)) return uri;
 
   const encodedPath = /^file:\/\/\/([^?#]+)$/.exec(uri)?.[1];
@@ -105,9 +108,50 @@ async function videoSource(uri: string, context: common.UIAbilityContext): Promi
   return fileUri.getUriFromPath(path);
 }
 
+interface VideoThumbnail {
+  uri: string;
+  width: number;
+  height: number;
+}
+
 export class HarmonyVideoModule extends UITurboModule {
   private active: VideoDialog | undefined;
   private transition: Promise<void> = Promise.resolve();
+
+  public async thumbnail(uri: string): Promise<VideoThumbnail | null> {
+    const source = await videoSource(uri, this.ctx.uiAbilityContext);
+    const extractor = await media.createAVMetadataExtractor();
+    let file: fileIo.File | undefined;
+    let frame: image.PixelMap | undefined;
+    let packer: image.ImagePacker | undefined;
+    try {
+      if (source.startsWith('file://')) {
+        file = await fileIo.open(source, fileIo.OpenMode.READ_ONLY);
+        extractor.fdSrc = { fd: file.fd };
+      } else {
+        extractor.setUrlSource(source);
+      }
+      frame = await extractor.fetchFrameByTimeWithTimeout(
+        0,
+        media.AVImageQueryOptions.AV_IMAGE_QUERY_CLOSEST_SYNC,
+        {},
+        5000,
+      );
+      if (!frame) return null;
+      const size = (await frame.getImageInfo()).size;
+      const scale = 480 / Math.max(size.width, size.height);
+      if (scale < 1) await frame.scale(scale, scale);
+      packer = image.createImagePacker();
+      const bytes = await packer.packToData(frame, { format: 'image/jpeg', quality: 80 });
+      const base64 = new util.Base64Helper().encodeToStringSync(new Uint8Array(bytes));
+      return { uri: 'data:image/jpeg;base64,' + base64, width: size.width, height: size.height };
+    } finally {
+      await packer?.release().catch(() => {});
+      await frame?.release().catch(() => {});
+      await extractor.release().catch(() => {});
+      if (file) await fileIo.close(file).catch(() => {});
+    }
+  }
 
   public present(uri: string, title: string, closeLabel: string, identifier: string): Promise<void> {
     const previous = this.active;

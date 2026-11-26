@@ -7,6 +7,10 @@
 #include "ReanimatedPackage.h"
 #include "ReanimatedWorkletPackage.h"
 #include "RnohReactNativeHarmonyGestureHandlerPackage.h"
+#include "T3WebViewPackage.h"
+#include "T3ComposerPastePackage.h"
+#include "T3InlineVideoPackage.h"
+#include "T3PdfPreviewPackage.h"
 
 namespace {
 class ConnectionStore final : public rnoh::ArkTSTurboModule {
@@ -28,6 +32,118 @@ class PairingScanner final : public rnoh::ArkTSTurboModule {
   }
 };
 
+class T3AttachmentPicker final : public rnoh::ArkTSTurboModule {
+ public:
+  T3AttachmentPicker(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {
+        ARK_ASYNC_METHOD_METADATA(pickDocuments, 1),
+        ARK_ASYNC_METHOD_METADATA(pickMedia, 2),
+    };
+  }
+};
+
+class T3ImageManipulator final : public rnoh::ArkTSTurboModule {
+ public:
+  T3ImageManipulator(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {
+        ARK_ASYNC_METHOD_METADATA(getSize, 1),
+        ARK_ASYNC_METHOD_METADATA(render, 5),
+    };
+  }
+};
+
+class T3DateTimePicker final : public rnoh::ArkTSTurboModule {
+ public:
+  T3DateTimePicker(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {ARK_ASYNC_METHOD_METADATA(pick, 2)};
+  }
+};
+
+class T3FileActions final : public rnoh::ArkTSTurboModule {
+ public:
+  T3FileActions(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {
+        ARK_METHOD_METADATA(isInlinePdfAvailable, 0),
+        ARK_ASYNC_METHOD_METADATA(openFile, 2),
+        ARK_ASYNC_METHOD_METADATA(saveImageToLibrary, 3),
+    };
+  }
+};
+
+class T3AgentNotifications final : public rnoh::ArkTSTurboModule {
+ public:
+  T3AgentNotifications(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {
+        ARK_ASYNC_METHOD_METADATA(isEnabled, 0),
+        ARK_ASYNC_METHOD_METADATA(openSettings, 0),
+        ARK_ASYNC_METHOD_METADATA(publish, 4),
+        ARK_ASYNC_METHOD_METADATA(takePendingLink, 0),
+        ARK_ASYNC_METHOD_METADATA(getPushToken, 0),
+        ARK_ASYNC_METHOD_METADATA(isHuaweiAccountAvailable, 0),
+        ARK_ASYNC_METHOD_METADATA(signInHuaweiAccount, 0),
+        ARK_ASYNC_METHOD_METADATA(observePushToken, 0),
+        ARK_ASYNC_METHOD_METADATA(deletePushToken, 0),
+    };
+  }
+};
+
+class T3FoldPosture final : public rnoh::ArkTSTurboModule {
+ public:
+  T3FoldPosture(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {ARK_ASYNC_METHOD_METADATA(readVerticalHinge, 0)};
+  }
+};
+
+class T3UsageWidget final : public rnoh::ArkTSTurboModule {
+ public:
+  T3UsageWidget(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {ARK_ASYNC_METHOD_METADATA(publish, 1)};
+  }
+};
+
+class T3AppGalleryUpdates final : public rnoh::ArkTSTurboModule {
+ public:
+  T3AppGalleryUpdates(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {
+        ARK_ASYNC_METHOD_METADATA(isAvailable, 0),
+        ARK_ASYNC_METHOD_METADATA(checkForUpdate, 0),
+    };
+  }
+};
+
+class T3Audio final : public rnoh::ArkTSTurboModule {
+ public:
+  T3Audio(Context context, const std::string& name)
+      : ArkTSTurboModule(context, name) {
+    methodMap_ = {
+        ARK_ASYNC_METHOD_METADATA(preparePlayer, 3),
+        ARK_ASYNC_METHOD_METADATA(playPlayer, 1),
+        ARK_ASYNC_METHOD_METADATA(pausePlayer, 1),
+        ARK_ASYNC_METHOD_METADATA(seekPlayer, 2),
+        ARK_ASYNC_METHOD_METADATA(releasePlayer, 1),
+        ARK_ASYNC_METHOD_METADATA(getRecordingPermission, 0),
+        ARK_ASYNC_METHOD_METADATA(requestRecordingPermission, 0),
+        ARK_ASYNC_METHOD_METADATA(prepareRecorder, 1),
+        ARK_ASYNC_METHOD_METADATA(startRecorder, 2),
+        ARK_ASYNC_METHOD_METADATA(stopRecorder, 1),
+        ARK_ASYNC_METHOD_METADATA(releaseRecorder, 1),
+        ARK_ASYNC_METHOD_METADATA(requestSpeech, 5),
+        ARK_ASYNC_METHOD_METADATA(cancelSpeech, 1),
+        ARK_ASYNC_METHOD_METADATA(checkLocalSpeechAvailability, 0),
+        ARK_ASYNC_METHOD_METADATA(transcribeLocalSpeech, 2),
+        ARK_ASYNC_METHOD_METADATA(cancelLocalSpeech, 1),
+    };
+  }
+};
+
 class T3Crypto final : public rnoh::ArkTSTurboModule {
  public:
   T3Crypto(Context context, const std::string& name)
@@ -37,6 +153,9 @@ class T3Crypto final : public rnoh::ArkTSTurboModule {
         ARK_METHOD_METADATA(randomBytes, 1),
         ARK_ASYNC_METHOD_METADATA(digestBytes, 2),
         ARK_ASYNC_METHOD_METADATA(digestText, 2),
+        ARK_ASYNC_METHOD_METADATA(generateDpopKey, 0),
+        ARK_ASYNC_METHOD_METADATA(dpopKeyMatches, 2),
+        ARK_ASYNC_METHOD_METADATA(signDpop, 2),
     };
   }
 };
@@ -49,6 +168,9 @@ class T3SecureStorage final : public rnoh::ArkTSTurboModule {
         ARK_ASYNC_METHOD_METADATA(getItem, 1),
         ARK_ASYNC_METHOD_METADATA(setItem, 2),
         ARK_ASYNC_METHOD_METADATA(deleteItem, 1),
+        ARK_METHOD_METADATA(setDeviceOnlyItem, 2),
+        ARK_ASYNC_METHOD_METADATA(getDeviceOnlyItem, 1),
+        ARK_ASYNC_METHOD_METADATA(deleteDeviceOnlyItem, 1),
     };
   }
 };
@@ -71,6 +193,7 @@ class T3Metadata final : public rnoh::ArkTSTurboModule {
     methodMap_ = {
         ARK_METHOD_METADATA(application, 0),
         ARK_METHOD_METADATA(device, 0),
+        ARK_METHOD_METADATA(is24HourFormat, 0),
     };
   }
 };
@@ -82,6 +205,10 @@ class T3Interaction final : public rnoh::ArkTSTurboModule {
     methodMap_ = {
         ARK_ASYNC_METHOD_METADATA(getClipboardText, 0),
         ARK_ASYNC_METHOD_METADATA(setClipboardText, 1),
+        ARK_ASYNC_METHOD_METADATA(writeComposerClipboard, 2),
+        ARK_ASYNC_METHOD_METADATA(takeComposerPasteImages, 2),
+        ARK_ASYNC_METHOD_METADATA(setKeyboardCommands, 1),
+        ARK_ASYNC_METHOD_METADATA(setComposerKeyboard, 2),
         ARK_ASYNC_METHOD_METADATA(vibrate, 1),
     };
   }
@@ -110,6 +237,7 @@ class T3Video final : public rnoh::ArkTSTurboModule {
     methodMap_ = {
         ARK_ASYNC_METHOD_METADATA(present, 4),
         ARK_ASYNC_METHOD_METADATA(close, 1),
+        ARK_ASYNC_METHOD_METADATA(thumbnail, 1),
     };
   }
 };
@@ -179,6 +307,9 @@ class T3TurboModules final : public rnoh::TurboModuleFactoryDelegate {
  public:
   SharedTurboModule createTurboModule(Context context, const std::string& name)
       const override {
+    if (name == "T3AttachmentPicker") {
+      return std::make_shared<T3AttachmentPicker>(context, name);
+    }
     if (name == "T3ConnectionStore") {
       return std::make_shared<ConnectionStore>(context, name);
     }
@@ -208,6 +339,30 @@ class T3TurboModules final : public rnoh::TurboModuleFactoryDelegate {
     }
     if (name == "T3SecureStorage") {
       return std::make_shared<T3SecureStorage>(context, name);
+    }
+    if (name == "T3ImageManipulator") {
+      return std::make_shared<T3ImageManipulator>(context, name);
+    }
+    if (name == "T3DateTimePicker") {
+      return std::make_shared<T3DateTimePicker>(context, name);
+    }
+    if (name == "T3FileActions") {
+      return std::make_shared<T3FileActions>(context, name);
+    }
+    if (name == "T3AgentNotifications") {
+      return std::make_shared<T3AgentNotifications>(context, name);
+    }
+    if (name == "T3FoldPosture") {
+      return std::make_shared<T3FoldPosture>(context, name);
+    }
+    if (name == "T3UsageWidget") {
+      return std::make_shared<T3UsageWidget>(context, name);
+    }
+    if (name == "T3AppGalleryUpdates") {
+      return std::make_shared<T3AppGalleryUpdates>(context, name);
+    }
+    if (name == "T3Audio") {
+      return std::make_shared<T3Audio>(context, name);
     }
     if (name == "T3Crypto") {
       return std::make_shared<T3Crypto>(context, name);
@@ -241,5 +396,9 @@ std::vector<std::shared_ptr<rnoh::Package>> rnoh::PackageProvider::getPackages(
       std::make_shared<ScreensPackage>(context),
       std::make_shared<SVGPackage>(context),
       std::make_shared<SafeAreaViewPackage>(context),
+      std::make_shared<rnoh::T3WebViewPackage>(context),
+      std::make_shared<rnoh::T3ComposerPastePackage>(context),
+      std::make_shared<rnoh::T3InlineVideoPackage>(context),
+      std::make_shared<rnoh::T3PdfPreviewPackage>(context),
   };
 }

@@ -16,7 +16,6 @@ import {
 } from "@t3tools/shared/filePreview";
 import { LegendList } from "@legendapp/list/react-native";
 import * as Schema from "effect/Schema";
-import { fetch } from "expo/fetch";
 import { File } from "expo-file-system";
 import { useNavigation, usePreventRemove } from "@react-navigation/native";
 import { msg, T, useGT, useMessages, Var } from "gt-react-native";
@@ -48,6 +47,7 @@ import {
 import { appendComposerDraftAttachments } from "../../state/use-composer-drafts";
 import { AttachmentDocumentBody, nativeViewerKind } from "./AttachmentDocumentBody";
 import { FilePreviewLoading } from "./FilePreviewFeedback";
+import { downloadZipArchive } from "./zipArchiveDownload";
 import {
   buildZipTree,
   flattenZipTree,
@@ -111,34 +111,6 @@ function errorMessage(cause: unknown, fallback: string) {
   return cause instanceof Error ? (errorDisplayMessage(cause, m) ?? cause.message) : fallback;
 }
 
-async function readArchiveBody(
-  body: ReadableStream<Uint8Array>,
-  onProgress: (receivedBytes: number) => void,
-) {
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > ARCHIVE_MAX_BYTES) throw new ZipFailureError({ failure: TOO_LARGE });
-      chunks.push(value);
-      onProgress(size);
-    }
-  } finally {
-    void reader.cancel().catch(() => {});
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes.buffer;
-}
-
 async function openArchive(bytes: ArrayBuffer): Promise<ZipArchive> {
   let files: Awaited<ReturnType<typeof boundedZip>>;
   try {
@@ -180,6 +152,7 @@ type ArchiveState =
   | { readonly status: "failed"; readonly failure: ZipFailure };
 
 function useZipArchive(input: {
+  readonly name: string;
   readonly uri: string | null;
   readonly isLocal: boolean;
   readonly sizeBytes: number;
@@ -192,7 +165,7 @@ function useZipArchive(input: {
   });
   const [revision, setRevision] = useState(0);
   const controller = useRef<AbortController | null>(null);
-  const { uri, isLocal, sizeBytes } = input;
+  const { name, uri, isLocal, sizeBytes } = input;
   // The parent mints a new refresh callback on every render; it must not reload the archive.
   const refresh = useEffectEvent(input.refresh);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Load archive bytes and cancel the stream on cleanup.
@@ -211,20 +184,21 @@ function useZipArchive(input: {
         return openArchive(await file.arrayBuffer());
       }
       const url = (await refresh()) ?? uri;
-      const response = await fetch(url, { signal: abort.signal });
-      if (!response.ok || !response.body) throw new ZipFailureError({ failure: NETWORK });
-      const bytes = await readArchiveBody(response.body, (receivedBytes) =>
-        setState({
-          status: "loading",
-          receivedBytes,
-          timeLeft: zipDownloadTimeLeft({
+      const bytes = await downloadZipArchive({
+        url,
+        name,
+        signal: abort.signal,
+        onProgress: (receivedBytes) =>
+          setState({
+            status: "loading",
             receivedBytes,
-            totalBytes: sizeBytes,
-            elapsedMs: Date.now() - startedAt,
+            timeLeft: zipDownloadTimeLeft({
+              receivedBytes,
+              totalBytes: sizeBytes,
+              elapsedMs: Date.now() - startedAt,
+            }),
           }),
-        }),
-      );
-      abort.signal.throwIfAborted();
+      });
       return openArchive(bytes);
     })()
       .then((archive) => {
@@ -234,12 +208,16 @@ function useZipArchive(input: {
         if (!abort.signal.aborted)
           setState({
             status: "failed",
-            failure: isZipFailureError(cause) ? cause.failure : NETWORK,
+            failure: isZipFailureError(cause)
+              ? cause.failure
+              : isZipError(cause) && cause.code === "file-too-large"
+                ? TOO_LARGE
+                : NETWORK,
           });
       });
     return () => abort.abort();
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Retry must reload the archive.
-  }, [uri, isLocal, sizeBytes, revision]);
+  }, [name, uri, isLocal, sizeBytes, revision]);
   return {
     state,
     retry: () => setRevision((value) => value + 1),

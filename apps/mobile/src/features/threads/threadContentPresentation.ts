@@ -13,6 +13,8 @@ export type ThreadContentPresentation =
       readonly detail: string;
     };
 
+export const THREAD_LOADING_MESSAGES = msg("Loading messages…");
+
 export function projectThreadContentPresentation(input: {
   readonly hasDetail: boolean;
   readonly detailError: string | null;
@@ -52,6 +54,17 @@ export function projectThreadContentPresentation(input: {
   };
 }
 
+export function threadFeedIsLoading(input: {
+  readonly presentation: ThreadContentPresentation["kind"];
+  readonly hasRows: boolean;
+  readonly isPositioningRows: boolean;
+}): boolean {
+  return (
+    input.presentation !== "unavailable" &&
+    (input.isPositioningRows || (input.presentation === "loading" && !input.hasRows))
+  );
+}
+
 export function threadSyncStatusLabel(
   status: EnvironmentThreadStatus,
   presentation: ThreadContentPresentation["kind"],
@@ -62,5 +75,5 @@ export function threadSyncStatusLabel(
   if (presentation === "ready") {
     return hasError ? resolve(msg("Could not sync messages")) : resolve(msg("Syncing messages…"));
   }
-  return presentation === "loading" ? resolve(msg("Loading messages…")) : null;
+  return presentation === "loading" ? resolve(THREAD_LOADING_MESSAGES) : null;
 }

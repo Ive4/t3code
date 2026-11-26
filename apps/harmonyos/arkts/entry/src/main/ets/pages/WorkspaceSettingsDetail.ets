@@ -1,4 +1,11 @@
 import { bundleManager } from '@kit.AbilityKit';
+import { defaultOpenSourceLicenses, formatDiagnosticsReport } from '../client/AboutDiagnosticsProtocol';
+import type { DiagnosticCrashEntry } from '../client/AboutDiagnosticsProtocol';
+import { defaultClientPreferences, formatStorageBytes } from '../client/ClientPreferencesProtocol';
+import type { ClientPreferenceKey, ClientPreferencesSnapshot, ClientPreferenceValue, ClientStorageSummary } from '../client/ClientPreferencesProtocol';
+import type { EnvironmentPreferencesSnapshot } from '../client/EnvironmentPreferencesProtocol';
+import type { NativeProviderSummary } from '../client/ProvidersProtocol';
+import type { NativeScheduledTask } from '../client/ScheduledTasksProtocol';
 import type { UiLanguage, UiLanguagePreference } from './UiLanguage';
 import { uiText } from './UiLanguage';
 import {
@@ -41,12 +48,12 @@ function link(id: string, label: string, icon: Resource, detail?: string): Setti
   return { id: 'settings-detail-' + id, label, icon, detail, kind: 'link' };
 }
 
-function choice(label: string, detail?: string): SettingsRowContent {
-  return { id: label, label, detail, kind: 'choice' };
+function choice(id: string, label: string, selected: boolean, detail?: string): SettingsRowContent {
+  return { id, label, detail, kind: 'choice', selected };
 }
 
-function toggle(label: string, detail?: string): SettingsRowContent {
-  return { id: label, label, detail, kind: 'switch' };
+function toggle(id: string, label: string, selected: boolean, detail?: string): SettingsRowContent {
+  return { id, label, detail, kind: 'switch', selected };
 }
 
 function group(title: string, ...rows: SettingsRowContent[]): DetailGroup {
@@ -62,8 +69,21 @@ export struct WorkspaceSettingsDetail {
   @Prop connected: boolean = false;
   @Prop signedIn: boolean = false;
   @Prop environmentLabel: string = '';
+  @Prop clientPreferences: ClientPreferencesSnapshot = defaultClientPreferences();
+  @Prop environmentPreferences: EnvironmentPreferencesSnapshot | undefined = undefined;
+  @Prop providers: NativeProviderSummary[] = [];
+  @Prop scheduledTasks: NativeScheduledTask[] = [];
+  @Prop storageSummary: ClientStorageSummary | undefined = undefined;
+  @Prop crashes: DiagnosticCrashEntry[] = [];
   @State private version: string = '';
   onLanguage: (value: UiLanguagePreference) => void = () => {};
+  onClientPreference: (key: ClientPreferenceKey, value: ClientPreferenceValue) => void = () => {};
+  onEnvironmentPatch: (patch: Record<string, Object | null | undefined>) => void = () => {};
+  onToggleProvider: (instanceId: string, enabled: boolean, driver: string) => void = () => {};
+  onToggleScheduledTask: (taskId: string, enabled: boolean) => void = () => {};
+  onRunScheduledTask: (taskId: string) => void = () => {};
+  onClearStorage: () => void = () => {};
+  onCopyDiagnostics: (report: string) => void = () => {};
   onBack: () => void = () => {};
   onOpenPage: (page: WorkspaceSettingsPage) => void = () => {};
   onAccount: () => void = () => {};
@@ -92,21 +112,27 @@ export struct WorkspaceSettingsDetail {
   }
 
   private groups(): DetailGroup[] {
+    const prefs = this.clientPreferences;
+    const env = this.environmentPreferences;
     switch (this.page) {
       case 'general':
         return [
           group('', link('language', this.text('语言', 'Language'), $r('sys.symbol.keyboard_badge_globe'),
             this.languageName(this.languagePreference))),
           group(this.text('项目分组', 'Project grouping'),
-            choice(this.text('按仓库分组', 'Group by repository'),
+            choice('pref:projectGrouping:repository', this.text('按仓库分组', 'Group by repository'),
+              prefs.projectGrouping === 'repository',
               this.text('相同仓库合并显示为一个项目。', 'Show checkouts of the same repository as one project.')),
-            choice(this.text('按仓库路径分组', 'Group by repository path'),
+            choice('pref:projectGrouping:repository-path', this.text('按仓库路径分组', 'Group by repository path'),
+              prefs.projectGrouping === 'repository-path',
               this.text('单体仓库中的不同路径分别显示。', 'Show different paths in a monorepo separately.')),
-            choice(this.text('分别显示', 'Show separately'),
+            choice('pref:projectGrouping:separate', this.text('分别显示', 'Show separately'),
+              prefs.projectGrouping === 'separate',
               this.text('每个工作区显示为独立项目。', 'Show each workspace as a separate project.'))),
-          group(this.text('侧栏', 'Sidebar'), toggle(this.text('聊天优先', 'Chats first'))),
+          group(this.text('侧栏', 'Sidebar'),
+            toggle('pref:sidebarChatsFirst', this.text('聊天优先', 'Chats first'), prefs.sidebarChatsFirst)),
           group(this.text('新会话', 'New chats'),
-            toggle(this.text('使用上次的项目', 'Use last project'),
+            toggle('pref:useLastProject', this.text('使用上次的项目', 'Use last project'), prefs.useLastProject,
               this.text('新会话默认使用此设备最近打开的项目。', 'Start new chats in the last project used on this device.'))),
         ];
       case 'language':
@@ -118,54 +144,116 @@ export struct WorkspaceSettingsDetail {
         })))];
       case 'chat':
         return [group(this.text('代理运行时', 'While the agent is running'),
-          choice(this.text('排队', 'Queue'),
+          choice('pref:runningAgentBehavior:queue', this.text('排队', 'Queue'),
+            prefs.runningAgentBehavior === 'queue',
             this.text('当前轮次完成后再处理消息。', 'Handle the message after the current turn.')),
-          choice(this.text('介入', 'Steer'),
+          choice('pref:runningAgentBehavior:steer', this.text('介入', 'Steer'),
+            prefs.runningAgentBehavior === 'steer',
             this.text('立即将消息发给代理，调整当前工作。', 'Send the message to the agent immediately to adjust its work.')))];
       case 'keyboard':
         return [group(this.text('回车键', 'Return key'),
-          choice(this.text('发送消息', 'Send message'),
+          choice('pref:composerReturnBehavior:send', this.text('发送消息', 'Send message'),
+            prefs.composerReturnBehavior === 'send',
             this.text('Return 发送消息，Shift + Return 插入新行。', 'Return sends a message. Shift + Return inserts a new line.')),
-          choice(this.text('插入新行', 'Insert new line'),
+          choice('pref:composerReturnBehavior:newline', this.text('插入新行', 'Insert new line'),
+            prefs.composerReturnBehavior === 'newline',
             this.text('Return 插入新行，Ctrl + Return 发送消息。', 'Return inserts a new line. Ctrl + Return sends a message.')))];
       case 'thread-preferences':
+        if (!env) return [];
         return [
           group(this.text('默认工作区', 'Default workspace'),
-            choice(this.text('继承', 'Inherit'),
+            choice('env:defaultThreadEnvMode:null', this.text('继承', 'Inherit'),
+              env.threadPreferences.defaultThreadEnvMode === null,
               this.text('使用仓库的 t3.json，或当前检出目录。', 'Use the repository’s t3.json or the current checkout.')),
-            choice(this.text('当前检出目录', 'Current checkout')), choice(this.text('新工作树', 'New worktree'))),
+            choice('env:defaultThreadEnvMode:local', this.text('当前检出目录', 'Current checkout'),
+              env.threadPreferences.defaultThreadEnvMode === 'local'),
+            choice('env:defaultThreadEnvMode:worktree', this.text('新工作树', 'New worktree'),
+              env.threadPreferences.defaultThreadEnvMode === 'worktree')),
           group(this.text('默认权限', 'Default permissions'),
-            choice(this.text('继承', 'Inherit')), choice(this.text('需要批准', 'Approval required')),
-            choice(this.text('自动接受编辑', 'Auto-accept edits')), choice(this.text('自动', 'Auto')),
-            choice(this.text('完全访问', 'Full access'))),
+            choice('env:defaultRuntimeMode:approval-required', this.text('需要批准', 'Approval required'),
+              env.threadPreferences.defaultRuntimeMode === 'approval-required'),
+            choice('env:defaultRuntimeMode:auto-accept-edits', this.text('自动接受编辑', 'Auto-accept edits'),
+              env.threadPreferences.defaultRuntimeMode === 'auto-accept-edits'),
+            choice('env:defaultRuntimeMode:auto', this.text('自动', 'Auto'),
+              env.threadPreferences.defaultRuntimeMode === 'auto'),
+            choice('env:defaultRuntimeMode:full-access', this.text('完全访问', 'Full access'),
+              env.threadPreferences.defaultRuntimeMode === 'full-access')),
           group(this.text('回复流式显示', 'Response streaming'),
-            choice(this.text('轮次完成后显示', 'Show when the turn ends'),
+            choice('env:responseStreamingMode:turn', this.text('轮次完成后显示', 'Show when the turn ends'),
+              env.threadPreferences.responseStreamingMode === 'turn',
               this.text('等待代理完成本轮回复。', 'Wait for the agent to finish its reply.')),
-            choice(this.text('显示已完成的段落', 'Show completed sections'),
+            choice('env:responseStreamingMode:paragraph', this.text('显示已完成的段落', 'Show completed sections'),
+              env.threadPreferences.responseStreamingMode === 'paragraph',
               this.text('每个段落或代码块完成后立即显示。', 'Show each paragraph or code block as it finishes.'))),
           group(this.text('预览浏览器', 'Preview browser'),
-            toggle(this.text('允许代理使用浏览器', 'Allow agents to use the browser'))),
+            toggle('env:enableAgentBrowserAccess', this.text('允许代理使用浏览器', 'Allow agents to use the browser'),
+              env.threadPreferences.enableAgentBrowserAccess)),
           group(this.text('用量限额', 'Usage limits'),
-            toggle(this.text('限额重置后恢复', 'Resume after limit resets')),
-            toggle(this.text('暂缓至限额重置', 'Snooze until limit resets'))),
+            toggle('env:autoResumeLimitedThreads', this.text('限额重置后恢复', 'Resume after limit resets'),
+              env.threadPreferences.autoResumeLimitedThreads),
+            toggle('env:snoozeLimitedThreads', this.text('暂缓至限额重置', 'Snooze until limit resets'),
+              env.threadPreferences.snoozeLimitedThreads)),
           group(this.text('自动收尾', 'Auto-settle'),
-            toggle(this.text('自动收尾已合并的会话', 'Auto-settle merged threads')),
-            toggle(this.text('自动收尾不活跃会话', 'Auto-settle inactive threads'))),
+            toggle('env:sidebarAutoSettleOnMerge', this.text('自动收尾已合并的会话', 'Auto-settle merged threads'),
+              env.threadPreferences.sidebarAutoSettleOnMerge),
+            toggle('env:sidebarAutoSettleAfterDays', this.text('自动收尾不活跃会话', 'Auto-settle inactive threads'),
+              env.threadPreferences.sidebarAutoSettleAfterDays !== null)),
         ];
       case 'source-control':
+        if (!env) return [];
         return [
           group(this.text('拉取请求', 'Pull requests'),
-            toggle(this.text('合并时移除代理署名', 'Remove agent credits when merging'))),
-          group(this.text('默认分支', 'Default branch'), toggle(this.text('自动拉取', 'Pull automatically'))),
-          group(this.text('克隆', 'Clone'), toggle(this.text('按主机目录克隆', 'Clone into host folders'))),
+            toggle('env:removeAgentCreditsOnMerge', this.text('合并时移除代理署名', 'Remove agent credits when merging'),
+              env.sourceControl.removeAgentCreditsOnMerge)),
+          group(this.text('默认分支', 'Default branch'),
+            toggle('env:defaultAutoPull', this.text('自动拉取', 'Pull automatically'), env.sourceControl.defaultAutoPull)),
+          group(this.text('克隆', 'Clone'),
+            toggle('env:ghqCloneLayout', this.text('按主机目录克隆', 'Clone into host folders'), env.sourceControl.ghqCloneLayout)),
         ];
       case 'worktrees':
+        if (!env) return [];
         return [
           group(this.text('新工作树', 'New worktrees'),
-            toggle(this.text('从远程分支开始', 'Start from the remote branch'))),
+            toggle('env:newWorktreesStartFromOrigin', this.text('从远程分支开始', 'Start from the remote branch'),
+              env.worktrees.newWorktreesStartFromOrigin)),
           group(this.text('工作树子模块', 'Worktree submodules'),
-            choice(this.text('继承', 'Inherit')), choice(this.text('初始化子模块', 'Initialize submodules')),
-            choice(this.text('跳过子模块', 'Skip submodules'))),
+            choice('env:worktreeSubmodules:null', this.text('继承', 'Inherit'),
+              env.worktrees.worktreeSubmodules === null),
+            choice('env:worktreeSubmodules:recursive', this.text('初始化子模块', 'Initialize submodules'),
+              env.worktrees.worktreeSubmodules === 'recursive'),
+            choice('env:worktreeSubmodules:none', this.text('跳过子模块', 'Skip submodules'),
+              env.worktrees.worktreeSubmodules === 'none')),
+        ];
+      case 'providers':
+        return [group(this.text('已安装的提供商', 'Installed providers'), ...this.providers.map((item): SettingsRowContent => ({
+          id: 'provider:' + item.instanceId,
+          label: item.displayName,
+          detail: item.driver + ' · ' + (item.authStatus === 'authenticated'
+            ? this.text('已认证', 'Authenticated')
+            : this.text('未认证', 'Unauthenticated')),
+          kind: 'switch',
+          selected: item.enabled,
+          disabled: !item.installed,
+        })))];
+      case 'scheduled-tasks':
+        return [group(this.text('定时任务', 'Scheduled tasks'), ...this.scheduledTasks.map((task): SettingsRowContent => ({
+          id: 'scheduled-task:' + task.id,
+          label: task.title || task.id,
+          detail: task.lastRunStatus + (task.nextRunAt ? ' · ' + task.nextRunAt : ''),
+          kind: 'switch',
+          selected: task.enabled,
+        })))];
+      case 'labs':
+        if (!env) return [];
+        return [
+          group(this.text('实验功能', 'Experimental features'),
+            toggle('env:fastWorktreeCheckout', this.text('快速工作树检出', 'Fast worktree checkout'),
+              env.labs.fastWorktreeCheckout),
+            toggle('env:linkedEnvironmentsEnabled', this.text('关联环境', 'Linked environments'),
+              env.labs.linkedEnvironmentsEnabled),
+            toggle('env:workflowsEnabled', this.text('工作流', 'Workflows'), env.labs.workflowsEnabled),
+            toggle('env:promptSuggestionsEnabled', this.text('提示词建议', 'Prompt suggestions'),
+              env.labs.promptSuggestionsEnabled)),
         ];
       case 'about':
         return [group(this.text('应用', 'App'),
@@ -178,8 +266,8 @@ export struct WorkspaceSettingsDetail {
       case 'notifications':
         return [
           group(this.text('代理活动', 'Agent activity'),
-            toggle(this.text('设备通知', 'Device notifications')),
-            toggle(this.text('持续代理活动', 'Live agent activity'))),
+            toggle('notif:device', this.text('设备通知', 'Device notifications'), false),
+            toggle('notif:live', this.text('持续代理活动', 'Live agent activity'), false)),
           ...(!this.signedIn ? [group('', link('account', this.text('登录 T3 账号', 'Sign in to T3 Account'),
             $r('sys.symbol.person_head_on_circle')))] : []),
         ];
@@ -188,25 +276,52 @@ export struct WorkspaceSettingsDetail {
           group(this.text('管理环境', 'Manage environments'), this.connected && this.environmentLabel
             ? link('active-environment', this.environmentLabel, $r('sys.symbol.computer'))
             : link('environments', this.text('环境', 'Environments'), $r('sys.symbol.computer'))),
-          group(this.text('更新', 'Updates'),
-            toggle(this.text('检查提供商更新', 'Check for provider updates')),
-            toggle(this.text('重启后继续', 'Resume after restart')),
-            toggle(this.text('代理工作时保持唤醒', 'Keep awake while agents work'))),
+          ...(env ? [group(this.text('更新', 'Updates'),
+            toggle('env:enableProviderUpdateChecks', this.text('检查提供商更新', 'Check for provider updates'),
+              env.maintenance.enableProviderUpdateChecks),
+            toggle('env:continueThreadsAfterServerUpdate', this.text('重启后继续', 'Resume after restart'),
+              env.maintenance.continueThreadsAfterServerUpdate),
+            toggle('env:keepAwakeWhileAgentsWork', this.text('代理工作时保持唤醒', 'Keep awake while agents work'),
+              env.maintenance.keepAwakeWhileAgentsWork))] : []),
         ];
       case 'client-storage':
         return [
-          group(this.text('环境缓存', 'Environment cache'), { id: 'settings-detail-cache-unavailable',
-            label: this.text('暂无法读取缓存状态', 'Cache status is unavailable') }),
-          group(this.text('操作', 'Actions'), { id: 'settings-detail-clear-cache',
-            label: this.text('清理缓存', 'Clear cache'), kind: 'link', disabled: true }),
+          group(this.text('环境缓存', 'Environment cache'), {
+            id: 'settings-detail-cache-summary',
+            label: this.text('已缓存数据', 'Cached data'),
+            value: this.storageSummary ? formatStorageBytes(this.storageSummary.cacheBytes) : '0 B',
+          }),
+          group(this.text('操作', 'Actions'), {
+            id: 'settings-detail-clear-cache',
+            label: this.text('清理缓存', 'Clear cache'),
+            kind: 'link',
+            disabled: !(this.storageSummary?.clearable ?? false),
+          }),
         ];
       case 'diagnostics':
         return [
-          group(this.text('启动崩溃', 'Startup crashes'), { id: 'settings-detail-crashes-unavailable',
-            label: this.text('暂无法读取启动崩溃日志', 'Startup crash logs are unavailable') }),
-          group(this.text('操作', 'Actions'), { id: 'settings-detail-copy-crash',
-            label: this.text('复制崩溃报告', 'Copy crash report'), kind: 'link', disabled: true }),
+          group(this.text('启动崩溃', 'Startup crashes'),
+            this.crashes.length > 0
+              ? { id: 'settings-detail-crashes-count', label: this.text('记录到崩溃日志', 'Crash logs recorded'),
+                  value: `${this.crashes.length}` }
+              : { id: 'settings-detail-crashes-empty', label: this.text('暂无崩溃记录', 'No crash logs recorded') }),
+          group(this.text('操作', 'Actions'), {
+            id: 'settings-detail-copy-crash',
+            label: this.text('复制诊断报告', 'Copy diagnostics report'),
+            kind: 'link',
+          }),
         ];
+      case 'licenses':
+        return [group(this.text('开源组件', 'Open source components'),
+          ...defaultOpenSourceLicenses().map((item): SettingsRowContent => ({
+            id: 'license:' + item.name,
+            label: item.name,
+            detail: item.repository,
+            value: item.license,
+          })))];
+      case 'legal':
+        return [group(this.text('条款与隐私', 'Terms & privacy'),
+          { id: 'legal-notice', label: 'T3 Code', detail: 'https://t3.codes/privacy · https://t3.codes/terms' })];
       default: return [];
     }
   }
@@ -214,29 +329,64 @@ export struct WorkspaceSettingsDetail {
   private status(): string {
     switch (this.page) {
       case 'providers':
-        return this.connected ? this.text('暂无法读取提供商。', 'Providers are unavailable.')
-          : this.text('选择一个已连接的环境。', 'Select a connected environment.');
+        return !this.connected
+          ? this.text('选择一个已连接的环境。', 'Select a connected environment.')
+          : (this.providers.length === 0 ? this.text('当前环境未检测到已安装的提供商。', 'No providers reported.') : '');
       case 'scheduled-tasks':
-        return this.connected ? this.text('暂无法读取定时任务。', 'Scheduled tasks are unavailable.')
-          : this.text('连接环境后即可查看和创建定时任务。', 'Connect an environment to view and create scheduled tasks.');
-      case 'licenses': return this.text('暂无法读取开源许可。', 'Open source licenses are unavailable.');
-      case 'legal': return this.text('暂无法加载法律信息。', 'Legal information is unavailable.');
-      case 'chat': return this.text('聊天偏好暂不可用。', 'Chat preferences are unavailable.');
-      case 'keyboard': return this.text('硬件键盘偏好暂不可用。', 'Hardware keyboard preferences are unavailable.');
-      case 'notifications': return this.text('通知设置暂不可用。', 'Notification settings are unavailable.');
+        return !this.connected
+          ? this.text('连接环境后即可查看和管理定时任务。', 'Connect an environment to manage scheduled tasks.')
+          : (this.scheduledTasks.length === 0 ? this.text('当前环境暂无定时任务。', 'No scheduled tasks.') : '');
       case 'labs':
-        return this.connected ? this.text('暂无法读取此环境的实验功能。', 'Labs for this environment are unavailable.')
-          : this.text('连接环境后可查看实验功能。', 'Connect an environment to view Labs.');
-      case 'general': return this.text('其他设置暂不可修改。', 'Other settings are unavailable.');
+        return this.connected ? '' : this.text('连接环境后可查看实验功能。', 'Connect an environment to view Labs.');
       case 'thread-preferences':
       case 'source-control':
       case 'worktrees':
-      case 'maintenance': return this.text('设置修改暂不可用。', 'Settings changes are unavailable.');
+      case 'maintenance':
+        return this.connected && !this.environmentPreferences
+          ? this.text('正在读取环境配置…', 'Loading environment settings…')
+          : (this.connected ? '' : this.text('选择一个已连接的环境以修改此项。', 'Select a connected environment.'));
       default: return '';
     }
   }
 
   private open(row: SettingsRowContent): void {
+    if (row.id.startsWith('pref:')) {
+      const parts = row.id.split(':');
+      const key = parts[1] as ClientPreferenceKey;
+      if (parts.length >= 3) {
+        this.onClientPreference(key, parts[2] as ClientPreferenceValue);
+      } else {
+        const current = key === 'sidebarChatsFirst'
+          ? this.clientPreferences.sidebarChatsFirst
+          : this.clientPreferences.useLastProject;
+        this.onClientPreference(key, !current);
+      }
+      return;
+    }
+    if (row.id.startsWith('env:')) {
+      const parts = row.id.split(':');
+      const key = parts[1];
+      const patch: Record<string, Object | null | undefined> = {};
+      if (parts.length >= 3) {
+        patch[key] = parts[2] === 'null' ? null : parts[2];
+      } else {
+        const nextValue = !(row.selected ?? false);
+        patch[key] = key === 'sidebarAutoSettleAfterDays' ? (nextValue ? 7 : null) : nextValue;
+      }
+      this.onEnvironmentPatch(patch);
+      return;
+    }
+    if (row.id.startsWith('provider:')) {
+      const instanceId = row.id.slice('provider:'.length);
+      const item = this.providers.find((entry) => entry.instanceId === instanceId);
+      if (item) this.onToggleProvider(item.instanceId, !(row.selected ?? false), item.driver);
+      return;
+    }
+    if (row.id.startsWith('scheduled-task:')) {
+      const taskId = row.id.slice('scheduled-task:'.length);
+      this.onToggleScheduledTask(taskId, !(row.selected ?? false));
+      return;
+    }
     switch (row.id) {
       case 'settings-detail-language': this.onOpenPage('language'); break;
       case 'settings-detail-language-system': this.onLanguage('system'); break;
@@ -246,6 +396,10 @@ export struct WorkspaceSettingsDetail {
       case 'settings-detail-diagnostics': this.onOpenPage('diagnostics'); break;
       case 'settings-detail-licenses': this.onOpenPage('licenses'); break;
       case 'settings-detail-legal': this.onOpenPage('legal'); break;
+      case 'settings-detail-clear-cache': this.onClearStorage(); break;
+      case 'settings-detail-copy-crash':
+        this.onCopyDiagnostics(formatDiagnosticsReport(this.version || '0.0.0', 0, this.crashes));
+        break;
       case 'settings-detail-account': this.onAccount(); break;
       case 'settings-detail-environments': this.onEnvironments(); break;
       case 'settings-detail-active-environment': this.onActiveEnvironment(); break;
@@ -285,7 +439,10 @@ export struct WorkspaceSettingsDetail {
               onSelect: (row: SettingsRowContent) => this.open(row),
             })
           }, (section: DetailGroup) => this.page + ':' + this.language + ':' + this.languagePreference +
-            ':' + this.environmentLabel + ':' + section.title)
+            ':' + this.environmentLabel + ':' + section.title + ':' +
+            section.rows.map((row: SettingsRowContent) =>
+              row.id + '=' + String(row.selected ?? '') + '=' + (row.value ?? '') + '=' + String(row.disabled ?? false)
+            ).join(','))
           if (this.status()) {
             Text(this.status()).fontSize(14).lineHeight('19fp').fontColor(workspaceMutedColor(this.dark))
               .width('100%').padding({ left: 16, right: 16, top: 4, bottom: 6 })

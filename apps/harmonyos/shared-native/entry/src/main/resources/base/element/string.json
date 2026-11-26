@@ -1,0 +1,10 @@
+{
+  "string": [
+    {
+      "name": "microphone_permission_reason",
+      "value": "T3 Code uses the microphone when you choose to record a voice prompt."
+    },
+    { "name": "shortcut_new_task", "value": "New task" },
+    { "name": "shortcut_pair_environment", "value": "Add environment" }
+  ]
+}

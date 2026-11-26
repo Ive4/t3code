@@ -219,7 +219,10 @@ import { useThreadQueuedCount } from "./ThreadQueueControl";
 import { ThreadGuestShareBar } from "./ThreadGuestShareBar";
 import { ThreadSideChatsRow } from "./ThreadSideChatsRow";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
-import { resolveThreadFeedSubmissionAnchor } from "./thread-feed-scroll-position";
+import {
+  resolveThreadFeedClearance,
+  resolveThreadFeedSubmissionAnchor,
+} from "./thread-feed-scroll-position";
 import { useOpenLinkedThread } from "./useOpenLinkedThread";
 import { useGlobalVoiceInput } from "../voice-input/VoiceInputProvider";
 import type { OrchestrationV2ProviderSession } from "@t3tools/contracts";
@@ -1077,7 +1080,8 @@ function ThreadDetailBody(
   // The question card reads the keyboard frame on the UI thread, in the same frame the sticky
   // view translates, so it gets the full height while the keyboard is closed and never crosses
   // the header while the keyboard moves.
-  const { height: keyboardTranslation } = useReanimatedKeyboardAnimation();
+  const { height: keyboardTranslation, progress: keyboardProgress } =
+    useReanimatedKeyboardAnimation();
   const pendingUserInputMaxHeight = useDerivedValue(() =>
     derivePendingUserInputMaxHeight({
       windowHeight: screenAreaHeight,
@@ -1188,6 +1192,19 @@ function ThreadDetailBody(
     },
     [questionInFlow, userInputCoverageApplies],
   );
+  const reservesComposerViewport = String(Platform.OS) === "harmony";
+  const feedViewportStyle = useAnimatedStyle(() => {
+    if (!reservesComposerViewport) return {};
+    // The Harmony keyboard scroll decorator does not apply its insets to the native scroll range.
+    const marginBottom = resolveThreadFeedClearance({
+      overlayHeight: combinedContentInsetEndAdjustment.value,
+      controlInset: controlInsets.bottom,
+      keyboardHeight: keyboardStickyEnabled ? -keyboardTranslation.value : 0,
+      keyboardProgress: keyboardProgress.value,
+      keyboardOffset: composerKeyboardOffset,
+    });
+    return { marginBottom };
+  });
   const composerPopoverLift = useDerivedValue(() =>
     withTiming(
       !composerSlotHidden && composerPopoverHeight.value > 0 ? composerPopoverHeight.value + 8 : 0,
@@ -1505,8 +1522,8 @@ function ThreadDetailBody(
           draftViewportHeight,
         )
       ) : showContent ? (
-        <View
-          style={{ flex: 1 }}
+        <Animated.View
+          style={reservesComposerViewport ? [{ flex: 1 }, feedViewportStyle] : { flex: 1 }}
           onTouchStart={handleFeedTouchStart}
           onTouchMove={handleFeedTouchMove}
           onTouchEnd={handleFeedTouchEnd}
@@ -1527,7 +1544,7 @@ function ThreadDetailBody(
               <RenderFailureView
                 {...fallback}
                 title={gt("The conversation couldn't be displayed")}
-                bottomInset={estimatedOverlayHeight}
+                bottomInset={reservesComposerViewport ? 0 : estimatedOverlayHeight}
               />
             )}
           >
@@ -1568,11 +1585,12 @@ function ThreadDetailBody(
                   jumpToMessageId={jumpMessageLoaded ? jumpMessageId : null}
                   onJumpedToMessage={() => finishThreadMessageJump(selectedThreadKey)}
                   contentInsetEndAdjustment={combinedContentInsetEndAdjustment}
+                  reservesComposerViewport={reservesComposerViewport}
                   keyboardOffset={composerKeyboardOffset}
                   sendingWithKeyboard={sendingWithKeyboard}
                   fitShortFeedToViewport={questionInFlow && !isKeyboardVisible}
                   contentBottomInset={
-                    questionInFlow
+                    questionInFlow || reservesComposerViewport
                       ? 0
                       : estimatedOverlayHeight +
                         (showFloatingStatus ? FLOATING_WORKING_CONTROL_COVERAGE : FEED_END_GAP)
@@ -1591,7 +1609,7 @@ function ThreadDetailBody(
               </ColumnWidth>
             </WorkspaceMutationIdProvider>
           </RenderErrorBoundary>
-        </View>
+        </Animated.View>
       ) : (
         <View className="flex-1" />
       )}

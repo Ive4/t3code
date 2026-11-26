@@ -9,6 +9,7 @@ import * as ExpoCrypto from "expo-crypto";
 import { msg } from "gt-react-native";
 
 import { m } from "../../i18n/messages";
+import { nativeDpopKeys } from "./dpopNativeKeys";
 import * as SecureStore from "expo-secure-store";
 import { DpopProof } from "@t3tools/client-runtime/relay";
 import { DpopPublicJwk } from "@t3tools/shared/dpopCommon";
@@ -76,19 +77,6 @@ export interface DpopProofKeyPair {
 }
 
 const DPOP_PROOF_KEY_STORAGE_KEY = "t3code.cloud.dpop-proof-key";
-
-interface NativeDpopKeys {
-  /** A 32-byte private scalar followed by its 65-byte uncompressed public point. */
-  generateDpopKey(): Promise<Uint8Array>;
-  dpopKeyMatches(privateKey: Uint8Array, publicKey: Uint8Array): Promise<boolean>;
-  /** ES256 over the signing input, as the raw 64-byte `r‖s` pair. */
-  signDpop(privateKey: Uint8Array, signingInput: Uint8Array): Promise<Uint8Array>;
-}
-
-// Platform crypto: in Hermes, @noble/curves blocks JS for about a second on its first P-256 key.
-// Imported lazily: loading `expo` at module scope breaks Node tests that import this file.
-const nativeDpopKeys = async () =>
-  (await import("expo")).requireNativeModule<NativeDpopKeys>("T3NativeControls");
 
 function base64UrlToBytes(value: string): Uint8Array {
   return Result.getOrThrow(Base64Url.decode(value));

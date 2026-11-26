@@ -112,6 +112,8 @@ const KINDS: Record<
   },
 };
 
+const usesSystemMicrophone = String(Platform.OS) === "harmony";
+
 const UNAVAILABLE_EXPLANATION =
   Platform.OS === "android"
     ? msg(
@@ -299,7 +301,11 @@ export function SettingsVoiceRouteScreen() {
         <SettingsSection title={gt("Transcribe on")}>
           <ListChoiceRow
             label={gt("This device")}
-            description={gt("Audio stays on this device and is transcribed here.")}
+            description={
+              usesSystemMicrophone && transcriber === null
+                ? gt("Transcription unavailable")
+                : gt("Audio stays on this device and is transcribed here.")
+            }
             selected={!grant && !sheetEnvironment}
             onPress={() => {
               setCloudSheet(null);
@@ -340,7 +346,7 @@ export function SettingsVoiceRouteScreen() {
             }
           />
         ) : null}
-        {!grant && transcriber === null ? (
+        {!usesSystemMicrophone && !grant && transcriber === null ? (
           <Text className="px-2 text-sm text-foreground-muted">{m(UNAVAILABLE_EXPLANATION)}</Text>
         ) : null}
         {permission === "ask" || permission === "denied" ? (
@@ -363,49 +369,53 @@ export function SettingsVoiceRouteScreen() {
             </Text>
           </>
         ) : null}
-        <SettingsSection title={gt("Preferred order")}>
-          {entries.map((entry, index) => {
-            const key = microphoneEntryKey(entry);
-            const shift =
-              dragFrom === -1 || index === dragFrom
-                ? 0
-                : dragFrom < dragTo && index > dragFrom && index <= dragTo
-                  ? -rowHeight
-                  : dragFrom > dragTo && index < dragFrom && index >= dragTo
-                    ? rowHeight
-                    : 0;
-            return (
-              <MicrophoneRow
-                key={`${key}:${drops}`}
-                entry={entry}
-                position={index + 1}
-                count={entries.length}
-                reorderable={ready}
-                offset={index === dragFrom ? (drag?.translation ?? 0) : shift}
-                lifted={index === dragFrom}
-                onHeight={setRowHeight}
-                onDragStart={() => setDrag({ key, translation: 0 })}
-                onDragMove={(translation) => setDrag({ key, translation })}
-                onDragEnd={(translation, cancelled) => {
-                  setDrag(null);
-                  setDrops((count) => count + 1);
-                  if (!cancelled) move(key, dropSteps(index, translation));
-                }}
-                onStep={(direction) => move(key, direction === "up" ? -1 : 1)}
-                onForget={isMicrophoneDevice(entry) ? () => forget(key) : undefined}
-              />
-            );
-          })}
-        </SettingsSection>
-        <Text className="px-2 text-sm text-foreground-muted">
-          {Platform.OS === "android"
-            ? gt(
-                "Voice input uses the first connected microphone in this list. A wired or Bluetooth microphone is added by name the first time you dictate with it connected; until then it falls under Other. Swipe left on a named microphone to forget it. Android may still use a different microphone if the preferred one can’t be routed.",
-              )
-            : gt(
-                "Voice input uses the first connected microphone in this list. A wired or Bluetooth microphone is added by name the first time you dictate with it connected; until then it falls under Other. Swipe left on a named microphone to forget it.",
-              )}
-        </Text>
+        {!usesSystemMicrophone ? (
+          <>
+            <SettingsSection title={gt("Preferred order")}>
+              {entries.map((entry, index) => {
+                const key = microphoneEntryKey(entry);
+                const shift =
+                  dragFrom === -1 || index === dragFrom
+                    ? 0
+                    : dragFrom < dragTo && index > dragFrom && index <= dragTo
+                      ? -rowHeight
+                      : dragFrom > dragTo && index < dragFrom && index >= dragTo
+                        ? rowHeight
+                        : 0;
+                return (
+                  <MicrophoneRow
+                    key={`${key}:${drops}`}
+                    entry={entry}
+                    position={index + 1}
+                    count={entries.length}
+                    reorderable={ready}
+                    offset={index === dragFrom ? (drag?.translation ?? 0) : shift}
+                    lifted={index === dragFrom}
+                    onHeight={setRowHeight}
+                    onDragStart={() => setDrag({ key, translation: 0 })}
+                    onDragMove={(translation) => setDrag({ key, translation })}
+                    onDragEnd={(translation, cancelled) => {
+                      setDrag(null);
+                      setDrops((count) => count + 1);
+                      if (!cancelled) move(key, dropSteps(index, translation));
+                    }}
+                    onStep={(direction) => move(key, direction === "up" ? -1 : 1)}
+                    onForget={isMicrophoneDevice(entry) ? () => forget(key) : undefined}
+                  />
+                );
+              })}
+            </SettingsSection>
+            <Text className="px-2 text-sm text-foreground-muted">
+              {Platform.OS === "android"
+                ? gt(
+                    "Voice input uses the first connected microphone in this list. A wired or Bluetooth microphone is added by name the first time you dictate with it connected; until then it falls under Other. Swipe left on a named microphone to forget it. Android may still use a different microphone if the preferred one can’t be routed.",
+                  )
+                : gt(
+                    "Voice input uses the first connected microphone in this list. A wired or Bluetooth microphone is added by name the first time you dictate with it connected; until then it falls under Other. Swipe left on a named microphone to forget it.",
+                  )}
+            </Text>
+          </>
+        ) : null}
       </ScrollView>
     </SettingsScreen>
   );

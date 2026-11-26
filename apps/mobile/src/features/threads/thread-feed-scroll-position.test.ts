@@ -1,8 +1,26 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  resolveThreadFeedClearance,
   resolveThreadFeedSubmissionAnchor,
   resolveThreadWorkGroupInitialScroll,
 } from "./thread-feed-scroll-position";
+
+it.each([
+  { keyboardHeight: 0, keyboardProgress: 0, expected: 112 },
+  { keyboardHeight: 160, keyboardProgress: 0.5, expected: 257 },
+  { keyboardHeight: 320, keyboardProgress: 1, expected: 402 },
+  { keyboardHeight: 5, keyboardProgress: 0.5, expected: 112 },
+])("reserves the composer and its keyboard position at $keyboardProgress", (fixture) => {
+  expect(
+    resolveThreadFeedClearance({
+      overlayHeight: 100,
+      controlInset: 12,
+      keyboardHeight: fixture.keyboardHeight,
+      keyboardProgress: fixture.keyboardProgress,
+      keyboardOffset: 30,
+    }),
+  ).toBe(fixture.expected);
+});
 
 describe("tool-group scroll restoration", () => {
   const position = {

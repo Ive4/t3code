@@ -2,6 +2,7 @@ import {
   AccountDeviceSession, AccountEmailAction, AccountEmailStep, AccountIdentity, AccountMode, AccountNameUpdate,
 } from '../client/AccountProtocol';
 import { RelayEnvironment } from '../client/RelayProtocol';
+import { workspaceForegroundColor, workspaceHeaderColor, workspaceMutedColor, workspaceSurfaceColor } from './WorkspaceChrome';
 
 interface AccountNameDraft {
   identity: AccountIdentity;
@@ -12,6 +13,7 @@ interface AccountNameDraft {
 @Component
 struct AccountSessions {
   @Prop @Watch('identityChanged') identity: AccountIdentity | undefined = undefined;
+  @Prop dark: boolean = false;
   @State private sessions: AccountDeviceSession[] = [];
   @State private loading: boolean = false;
   @State private loadError: string = '';
@@ -116,7 +118,7 @@ struct AccountSessions {
         Text('活动会话')
           .fontSize(17)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
+          .fontColor(workspaceForegroundColor(this.dark))
           .layoutWeight(1)
         if (this.loading) {
           LoadingProgress().width(20).height(20).accessibilityText('正在加载活动会话')
@@ -130,20 +132,20 @@ struct AccountSessions {
       if (this.loadError) {
         Text(this.loadError)
           .fontSize(15)
-          .fontColor($r('sys.color.font_primary'))
+          .fontColor(workspaceForegroundColor(this.dark))
       } else {
         ForEach(this.sessions, (session: AccountDeviceSession) => {
           Row({ space: 8 }) {
             Column({ space: 4 }) {
               Text(this.sessionLabel(session))
                 .fontSize(16)
-                .fontColor($r('sys.color.font_primary'))
+                .fontColor(workspaceForegroundColor(this.dark))
                 .maxLines(2)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
               if (this.sessionDetails(session)) {
                 Text(this.sessionDetails(session))
                   .fontSize(13)
-                  .fontColor($r('sys.color.font_secondary'))
+                  .fontColor(workspaceMutedColor(this.dark))
               }
             }
             .layoutWeight(1)

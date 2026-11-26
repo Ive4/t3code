@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "Остаток подписки"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "Откройте T3, чтобы обновить"
+    }
+  ]
+}

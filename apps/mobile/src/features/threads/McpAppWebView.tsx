@@ -515,7 +515,10 @@ export function ThreadMcpApp(props: {
   const source =
     uri === null
       ? null
-      : { html: outerDocument(uri, mcpAppAllowAttribute(app.permissions), secret) };
+      : {
+          html: outerDocument(uri, mcpAppAllowAttribute(app.permissions), secret),
+          harmonyWebFrames: true,
+        };
 
   if (presentedFullscreen) {
     return (

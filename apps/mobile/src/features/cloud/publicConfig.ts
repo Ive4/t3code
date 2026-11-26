@@ -1,4 +1,4 @@
-import Constants from "expo-constants";
+import { getCloudConfigExtra } from "./cloudConfigExtra";
 import { relayClerkTokenOptions } from "@t3tools/shared/relayAuth";
 import { normalizeSecureRelayUrl } from "@t3tools/shared/relayUrl";
 import * as Schema from "effect/Schema";
@@ -56,7 +56,7 @@ function normalizeSecureUrl(value: unknown): string | null {
   }
 }
 
-export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig?.extra) {
+export function resolveCloudPublicConfig(extra: ExpoExtra = getCloudConfigExtra()) {
   return {
     clerk: {
       publishableKey: trimNonEmpty(extra?.clerk?.publishableKey),
@@ -76,6 +76,10 @@ export function resolveCloudPublicConfig(extra: ExpoExtra = Constants.expoConfig
 export function hasCloudPublicConfig(): boolean {
   const config = resolveCloudPublicConfig();
   return Boolean(config.clerk.publishableKey && config.clerk.jwtTemplate && config.relay.url);
+}
+
+export function getHarmonyPushPublicUrl(): unknown {
+  return getCloudConfigExtra()?.harmonyPush?.url;
 }
 
 type Configured<T> = {

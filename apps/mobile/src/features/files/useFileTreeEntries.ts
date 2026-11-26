@@ -4,7 +4,7 @@ import { executeAtomQuery } from "@t3tools/client-runtime/state/runtime";
 import { ProjectListEntriesError, type EnvironmentId, type ProjectEntry } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Atom } from "effect/reactivity";
 import { msg } from "gt-react-native";
 
@@ -168,16 +168,21 @@ export function useFileTreeEntries(input: {
     if (workspaces.size > 8) workspaces.delete(workspaces.keys().next().value!);
     setCache({ key: workspaceKey, workspaces });
   }
-  const setDirectories = (
-    update: (current: ReturnType<typeof createDirectories>) => ReturnType<typeof createDirectories>,
-  ) =>
-    setCache((current) => {
-      const previous = current.workspaces.get(workspaceKey);
-      if (!previous) return current;
-      const next = boundDirectories(update(previous));
-      if (next === previous) return current;
-      return { ...current, workspaces: new Map(current.workspaces).set(workspaceKey, next) };
-    });
+  const setDirectories = useCallback(
+    (
+      update: (
+        current: ReturnType<typeof createDirectories>,
+      ) => ReturnType<typeof createDirectories>,
+    ) =>
+      setCache((current) => {
+        const previous = current.workspaces.get(workspaceKey);
+        if (!previous) return current;
+        const next = boundDirectories(update(previous));
+        if (next === previous) return current;
+        return { ...current, workspaces: new Map(current.workspaces).set(workspaceKey, next) };
+      }),
+    [workspaceKey],
+  );
   const { target } = directories;
   const requestsByTarget = useRef(new WeakMap<object, ReturnType<typeof createRequests>>());
   // Cancel the old target before consumers' passive effects start new directory loads.

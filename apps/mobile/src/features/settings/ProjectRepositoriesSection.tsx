@@ -19,6 +19,7 @@ import { useState } from "react";
 import { Pressable } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
+import { ContentStatus } from "../../components/ui/ContentBand";
 import * as Dialog from "../../components/ui/Dialog";
 import { ListActionRow } from "../../components/ui/ListActionRow";
 import { ListRowLayout } from "../../components/ui/ListRowLayout";
@@ -67,6 +68,9 @@ export function ProjectRepositoriesSection(props: {
       : null,
   );
   const suggested = suggestedTrackedFolders(folders, scanQuery.data?.folders ?? []);
+  const isLoadingFolders =
+    (listQuery.isPending && listQuery.data === null) ||
+    (scanQuery.isPending && scanQuery.data === null);
   const updateProject = useAtomCommand(projectEnvironment.update, { reportFailure: false });
   const [isSaving, setIsSaving] = useState(false);
   // A save builds on the listed folders, so it waits for the list that follows the last one.
@@ -125,7 +129,7 @@ export function ProjectRepositoriesSection(props: {
     void save({ track: folder });
   };
 
-  if (folders.length === 0 && suggested.length === 0) {
+  if (!isLoadingFolders && folders.length === 0 && suggested.length === 0) {
     return (
       <SettingsSection
         title={props.title}
@@ -186,6 +190,7 @@ export function ProjectRepositoriesSection(props: {
           onPress={() => add(folder)}
         />
       ))}
+      {isLoadingFolders ? <ContentStatus loading detail={gt("Loading repositories…")} /> : null}
     </SettingsSection>
   );
 }

@@ -240,6 +240,10 @@ For [cloud dictation](./voice-input.md#choose-where-audio-goes), open **Cloud pr
 under the environment in **Settings → Voice** and confirm which provider may receive recordings.
 On Android, keep T3 Code open while recording and transcribing.
 
+On supported HarmonyOS phones, **This device** transcribes Mandarin offline for
+up to one minute per recording. Audio stays on the phone. For other languages,
+choose a paired environment with a model that supports them.
+
 On-device dictation may need a network connection to download a speech model the
 first time. After that it works offline for that language. iPhone dictates in the
 first of your preferred languages (**Settings → General → Language & Region**)

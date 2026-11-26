@@ -112,7 +112,7 @@ interface ShellSnapshot {
   projects?: OrchestrationProject[];
 }
 
-interface RpcRequest {
+export interface RpcRequest {
   _tag: string;
   id: string;
   tag: string;

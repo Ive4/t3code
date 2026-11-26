@@ -26,6 +26,16 @@ function shrinkToByteLimit(
   return next.width < size.width || next.height < size.height ? next : null;
 }
 
+export async function removeTemporaryComposerImage(uri: string): Promise<void> {
+  try {
+    const { File } = await import("expo-file-system");
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch (error) {
+    console.warn("[composer-images] could not remove temporary image", error);
+  }
+}
+
 export async function renderPhoto(
   uri: string,
   format: "jpeg" | "png" = "jpeg",
@@ -46,6 +56,7 @@ export async function renderPhoto(
         base64: true,
       });
       if (!saved.base64) {
+        await removeTemporaryComposerImage(saved.uri);
         throw new Error("The rendered photo has no bytes.");
       }
       // PNG ignores compress, so a resampled PNG can encode larger than its original.
@@ -54,13 +65,7 @@ export async function renderPhoto(
           ? shrinkToByteLimit(image, estimateBase64ByteSize(saved.base64))
           : null;
       if (size === null) return { base64: saved.base64, uri: saved.uri };
-      try {
-        const { File } = await import("expo-file-system");
-        const discarded = new File(saved.uri);
-        if (discarded.exists) discarded.delete();
-      } catch (error) {
-        console.warn("[composer-images] could not remove discarded render", error);
-      }
+      await removeTemporaryComposerImage(saved.uri);
     }
   } finally {
     image.release();

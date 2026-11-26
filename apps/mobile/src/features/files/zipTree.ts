@@ -2,6 +2,8 @@ import { msg } from "gt-react-native";
 
 import { m, type MessageResolver } from "../../i18n/messages";
 
+import { compareFileNames } from "./compareFileNames";
+
 export interface ZipEntry {
   readonly path: string;
   readonly name: string;
@@ -31,8 +33,6 @@ interface MutableNode {
   children: Map<string, MutableNode>;
 }
 
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-
 function freeze(node: MutableNode): ZipTreeNode {
   let current = node;
   let label = node.name;
@@ -48,7 +48,7 @@ function freeze(node: MutableNode): ZipTreeNode {
         ? left.entry === null
           ? -1
           : 1
-        : collator.compare(left.name, right.name),
+        : compareFileNames(left.name, right.name),
     )
     .map(freeze);
   return {

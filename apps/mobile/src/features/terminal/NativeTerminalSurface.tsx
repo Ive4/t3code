@@ -3,8 +3,18 @@ import {
   type TerminalGrid,
   type TerminalOutputState,
 } from "@t3tools/client-runtime/state/terminal";
+import { normalizeTerminalOutput, terminalOutputPlainText } from "@t3tools/shared/terminalOutput";
 import { useGT } from "gt-react-native";
-import { memo, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 import {
   Pressable,
   ScrollView,
@@ -223,14 +233,16 @@ const ReadyTerminalSurface = memo(function ReadyTerminalSurface({
   const { themeAppearance, themeId } = useAppearancePreferences();
   const theme = props.theme ?? getMobileTerminalTheme(themeId, themeAppearance);
   const { onInput, onResize } = props;
-  const NativeTerminalSurfaceView = resolveNativeTerminalSurfaceView();
+  const [surfaceUnavailable, setSurfaceUnavailable] = useState(false);
+  const handleSurfaceUnavailable = useCallback(() => setSurfaceUnavailable(true), []);
+  const NativeTerminalSurfaceView = surfaceUnavailable ? null : resolveNativeTerminalSurfaceView();
   const gridCols = grid?.cols;
   const gridRows = grid?.rows;
   const sharedGrid = useMemo(
     () => (gridCols !== undefined && gridRows !== undefined ? [gridCols, gridRows] : []),
     [gridCols, gridRows],
   );
-  const streaming = supportsNativeTerminalOutput();
+  const streaming = !surfaceUnavailable && supportsNativeTerminalOutput();
   const nativeRef = useRef<NativeTerminalSurfaceHandle>(null);
   const writerRef = useRef<ReturnType<typeof createTerminalOutputWriter> | null>(null);
   const [nativeReady, setNativeReady] = useState(false);
@@ -286,6 +298,7 @@ const ReadyTerminalSurface = memo(function ReadyTerminalSurface({
         {/* oxlint-disable-next-line react/static-components -- The resolver returns a cached native component with stable identity. */}
         <NativeTerminalSurfaceView
           ref={nativeRef}
+          onSurfaceUnavailable={handleSurfaceUnavailable}
           appearanceScheme={themeAppearance}
           autoFocus={!props.readOnly && (props.autoFocus ?? true)}
           readOnly={props.readOnly ?? false}
@@ -311,5 +324,17 @@ const ReadyTerminalSurface = memo(function ReadyTerminalSurface({
     );
   }
 
-  return <FallbackTerminalSurface {...props} ref={ref} fontSize={fontSize} theme={theme} />;
+  const replay =
+    surfaceUnavailable && props.output ? terminalOutputText(props.output) : props.buffer;
+  return (
+    <FallbackTerminalSurface
+      {...props}
+      ref={ref}
+      buffer={
+        surfaceUnavailable ? terminalOutputPlainText(normalizeTerminalOutput(replay).text) : replay
+      }
+      fontSize={fontSize}
+      theme={theme}
+    />
+  );
 });

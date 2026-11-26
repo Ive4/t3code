@@ -6,7 +6,7 @@ import type { ThemedSwitchProps } from "./NativeSwitch.types";
 export type { ThemedSwitchProps } from "./NativeSwitch.types";
 
 export function ThemedSwitch(props: ThemedSwitchProps) {
-  if (Platform.OS === "android") {
+  if (Platform.OS === "android" || String(Platform.OS) === "harmony") {
     return <NativeSwitch {...props} />;
   }
 

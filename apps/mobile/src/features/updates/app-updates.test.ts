@@ -76,6 +76,25 @@ function makeAvailableUpdateClient(overrides: Partial<AppUpdateClient> = {}): Ap
 }
 
 describe("runAppUpdateCheck", () => {
+  it.each([
+    { updatePrompted: false, finalState: "current" },
+    { updatePrompted: true, finalState: "idle" },
+  ])(
+    "allows the app store to own update installation ($finalState)",
+    async ({ updatePrompted, finalState }) => {
+      const client = makeAvailableUpdateClient();
+      const states: AppUpdateCheckState[] = [];
+      await runAppUpdateCheck({
+        client,
+        storeClient: { checkForUpdate: async () => updatePrompted },
+        onStateChange: (state) => states.push(state),
+      });
+      expect(states).toEqual(["checking", finalState]);
+      expect(client.checkForUpdateAsync).not.toHaveBeenCalled();
+      expect(client.reloadAsync).not.toHaveBeenCalled();
+    },
+  );
+
   it("flushes pending writes before restarting", async () => {
     const client = makeAvailableUpdateClient();
     const { environment } = makeUpdateEnvironment();

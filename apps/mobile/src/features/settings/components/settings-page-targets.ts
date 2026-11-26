@@ -2,6 +2,7 @@
 export const SETTINGS_PAGE_TARGETS = [
   "SettingsEnvironments",
   "SettingsNotifications",
+  "SettingsHuaweiAccount",
   "SettingsThreads",
   "SettingsAbout",
   "SettingsArchive",
@@ -27,5 +28,9 @@ export const SETTINGS_PAGE_TARGETS = [
 ] as const;
 
 export type SettingsPageTarget = (typeof SETTINGS_PAGE_TARGETS)[number];
+
+export function appearanceSettingsAvailable(platform: string) {
+  return platform !== "harmony";
+}
 
 export type SettingsLegalDocumentTarget = "SettingsLegal";

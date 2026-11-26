@@ -21,6 +21,7 @@ import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { RelativeTime } from "../../components/RelativeTime";
+import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { AppText as Text } from "../../components/ui/AppText";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ScreenScrollView } from "../../components/ui/ScreenScrollView";
@@ -169,7 +170,7 @@ const TAB_ORDER: ReadonlyArray<WorkflowListTab> = ["needs-you", "running", "all"
 
 /** The Workflows tab: what waits on you first, in every environment this device is connected to. */
 export function WorkflowsScreen() {
-  const { environments, isReady } = useEnvironments();
+  const { environments, isReady, networkStatus } = useEnvironments();
   const [tab, setTab] = useState<WorkflowListTab | null>(null);
   const insets = useSafeAreaInsets();
   const gt = useGT();
@@ -199,7 +200,21 @@ export function WorkflowsScreen() {
   const withRuns = sections.flatMap(({ environment, snapshot }) =>
     snapshot !== null && snapshot.runs.length > 0 ? [{ environment, snapshot }] : [],
   );
-  const settled = sections.every(({ snapshot, error }) => snapshot !== null || error !== null);
+  const waitingForSnapshot =
+    !isReady ||
+    (networkStatus !== "offline" &&
+      sections.some(({ environment, snapshot, error }) => {
+        const { phase, awaitingApproval } = environment.connection;
+        return (
+          snapshot === null &&
+          error === null &&
+          environment.entry.enabled &&
+          !awaitingApproval &&
+          (phase === "connected" || phase === "connecting" || phase === "reconnecting")
+        );
+      }));
+  const hasSnapshot = sections.some(({ snapshot }) => snapshot !== null);
+  const hasError = sections.some(({ error }) => error !== null);
   // Open on the most pressing list any environment has.
   const opening =
     TAB_ORDER.find((candidate) =>
@@ -229,7 +244,12 @@ export function WorkflowsScreen() {
           : [],
       )}
       {withRuns.length === 0 ? (
-        settled ? (
+        waitingForSnapshot ? (
+          <View className="items-center gap-3 py-12">
+            <AppActivityIndicator colorClassName="accent-icon" />
+            <Text className="text-sm text-foreground-muted">{gt("Loading…")}</Text>
+          </View>
+        ) : hasSnapshot ? (
           <EmptyState
             variant="plain"
             title={gt("No workflow runs yet")}
@@ -237,7 +257,13 @@ export function WorkflowsScreen() {
               "A workflow ties agents, code, schedules and questions to you into one run that survives restarts. Write one on your computer, under Workflows, then Definitions.",
             )}
           />
-        ) : null
+        ) : hasError ? null : (
+          <EmptyState
+            variant="plain"
+            title={gt("Environment unavailable")}
+            detail={gt("Connect an environment to see its workflow runs.")}
+          />
+        )
       ) : (
         <>
           <View className="px-5 pb-2 pt-3">

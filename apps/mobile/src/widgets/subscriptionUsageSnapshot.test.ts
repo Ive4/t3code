@@ -8,6 +8,7 @@ import {
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   buildSubscriptionUsageSnapshot,
+  createHarmonyUsageWidgetData,
   createWidgetRefresher,
   WIDGET_REFRESH_INTERVAL,
 } from "./subscriptionUsageSnapshot";
@@ -50,6 +51,31 @@ function presentations(providers: readonly ServerProvider[] = [provider()]) {
 }
 
 describe("subscription widget snapshots", () => {
+  it("shares only the primary quota readings with the HarmonyOS launcher", () => {
+    const snapshot = buildSubscriptionUsageSnapshot(presentations(), deepLink);
+    const codex = snapshot.providers[0]!;
+    const data = createHarmonyUsageWidgetData({
+      ...snapshot,
+      providers: [
+        {
+          ...codex,
+          windows: [
+            { label: "Other", remaining: 7, reset: "Reset at 14:00" },
+            ...codex.windows,
+            { kind: "weekly", label: "Weekly", remaining: 92, reset: "Reset tomorrow" },
+          ],
+        },
+      ],
+    });
+
+    expect(data.rows).toEqual([
+      { label: "Codex · 5 hours · 60% left", remaining: 60, expiresAt: now + 10 * 60_000 },
+      { label: "Codex · Weekly · 92% left", remaining: 92, expiresAt: now + 10 * 60_000 },
+    ]);
+    expect(JSON.stringify(data)).not.toContain("private@example.com");
+    expect(JSON.stringify(data)).not.toContain(deepLink);
+  });
+
   it("uses provider data and its observation time without exposing account emails", () => {
     const snapshot = buildSubscriptionUsageSnapshot(
       presentations([provider({ displayName: "private@example.com" })]),

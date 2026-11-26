@@ -99,6 +99,7 @@ import { newTaskFlowKey } from "./features/threads/new-task-flow-state";
 import { NewTaskRouteScreen } from "./features/threads/NewTaskRouteScreen";
 import { SettingsNavigationRouteScreen } from "./features/settings/SettingsNavigationRouteScreen";
 import { SettingsAppearanceRouteScreen } from "./features/settings/SettingsAppearanceRouteScreen";
+import { appearanceSettingsAvailable } from "./features/settings/components/settings-page-targets";
 import { SettingsClientStorageRouteScreen } from "./features/settings/SettingsClientStorageRouteScreen";
 import { SettingsDiagnosticsRouteScreen } from "./features/diagnostics/SettingsDiagnosticsRouteScreen";
 import { SettingsProviderAccountsRouteScreen } from "./features/settings/SettingsProviderAccountsRouteScreen";
@@ -142,7 +143,9 @@ import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
 import { WorkflowRunRouteScreen } from "./features/workflows/WorkflowRunRouteScreen";
 import { WorkflowStepSheet } from "./features/workflows/WorkflowStepSheet";
 import { SettingsAboutRouteScreen } from "./features/settings/SettingsAboutRouteScreen";
+import { SettingsHuaweiAccountRouteScreen } from "./features/settings/SettingsHuaweiAccountRouteScreen";
 import { SettingsNotificationsRouteScreen } from "./features/settings/SettingsNotificationsRouteScreen";
+import { harmonyPushConfigured } from "./features/agent-awareness/harmonyAgentNotifications";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
 import { SettingsLabsRouteScreen } from "./features/settings/ThreadSettingsSections";
 import { SettingsEnvironmentFilterProvider } from "./features/settings/settings-environment-filter";
@@ -182,6 +185,7 @@ const ROUTE_TITLES: Readonly<Record<string, string>> = {
   SettingsProviderAccounts: msg("Providers"),
   SettingsEnvironmentMaintenance: msg("Maintenance"),
   SettingsNotifications: msg("Notifications"),
+  SettingsHuaweiAccount: msg("Huawei Account"),
   SettingsThreads: msg("Threads"),
   SettingsAbout: msg("About"),
   SettingsEnvironmentNew: msg("Add Environment"),
@@ -301,6 +305,15 @@ const SETTINGS_SCREENS = {
     linking: "settings/notifications",
     options: settingsPage(),
   }),
+  ...(harmonyPushConfigured
+    ? {
+        SettingsHuaweiAccount: createNativeStackScreen({
+          screen: SettingsHuaweiAccountRouteScreen,
+          linking: "settings/huawei-account",
+          options: settingsPage(),
+        }),
+      }
+    : {}),
   SettingsThreads: createNativeStackScreen({
     screen: SettingsThreadsRouteScreen,
     linking: "settings/thread-preferences",
@@ -326,11 +339,15 @@ const SETTINGS_SCREENS = {
     linking: "settings/navigation-tabs",
     options: settingsPage(),
   }),
-  SettingsAppearance: createNativeStackScreen({
-    screen: SettingsAppearanceRouteScreen,
-    linking: "settings/appearance",
-    options: settingsPage(),
-  }),
+  ...(appearanceSettingsAvailable(Platform.OS)
+    ? {
+        SettingsAppearance: createNativeStackScreen({
+          screen: SettingsAppearanceRouteScreen,
+          linking: "settings/appearance",
+          options: settingsPage(),
+        }),
+      }
+    : {}),
   SettingsProjectGrouping: createNativeStackScreen({
     screen: SettingsProjectGroupingRouteScreen,
     linking: "settings/project-grouping",
@@ -865,7 +882,7 @@ const RootStackConfig = createWorkspaceStackNavigator({
     }),
     ConnectionsNew: createNativeStackScreen({
       screen: ConnectionsNewRouteScreen,
-      linking: "connections/new",
+      linking: { path: "connections/new", alias: ["pair"] },
       options: sheetRoute({ detent: 0.55, maxDetent: 0.7 }),
     }),
     NotFound: createNativeStackScreen({

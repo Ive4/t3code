@@ -17,6 +17,7 @@ export function useNativeReviewDiffBridge(input: {
   readonly viewedFileIds: ReadonlyArray<string>;
   readonly selectedRowIds: ReadonlyArray<string>;
   readonly canHighlight: boolean;
+  readonly serializeRows?: boolean;
 }) {
   const {
     canHighlight,
@@ -25,6 +26,7 @@ export function useNativeReviewDiffBridge(input: {
     diff,
     sectionId,
     selectedRowIds,
+    serializeRows = true,
     threadKey,
     viewedFileIds,
   } = input;
@@ -42,7 +44,10 @@ export function useNativeReviewDiffBridge(input: {
     [appTheme, scheme, themeId],
   );
   const collapsedFileIdsSet = useMemo(() => new Set(collapsedFileIds), [collapsedFileIds]);
-  const rowsJson = useMemo(() => JSON.stringify(data.rows), [data.rows]);
+  const rowsJson = useMemo(
+    () => (serializeRows ? JSON.stringify(data.rows) : "[]"),
+    [data.rows, serializeRows],
+  );
   const collapsedFileIdsJson = useMemo(() => JSON.stringify(collapsedFileIds), [collapsedFileIds]);
   const viewedFileIdsJson = useMemo(() => JSON.stringify(viewedFileIds), [viewedFileIds]);
   const selectedRowIdsJson = useMemo(() => JSON.stringify(selectedRowIds), [selectedRowIds]);

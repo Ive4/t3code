@@ -25,6 +25,8 @@ import type { ThreadFeedEntry } from "./threadActivity";
 import type { MarkdownImageRenderer } from "../native/SelectableMarkdownText";
 import type { FilePreviewItem, FilePreviewSource } from "../components/ui/FilePreviewModal.types";
 
+vi.mock("../features/browser/TunnelWebView", () => ({ supportsNativePreviewTunnel: true }));
+
 const audio = vi.hoisted(() => ({
   status: {
     playing: false,

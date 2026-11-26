@@ -1,10 +1,12 @@
-import { T } from "gt-react-native";
+import { T, useGT } from "gt-react-native";
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { ComponentProps } from "react";
 import { View, type ViewProps } from "react-native";
 
 import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
+import { ContentStatus } from "../../components/ui/ContentBand";
+import { useConnectionsReady } from "../../state/workspace";
 import { ConnectionEnvironmentRow } from "./ConnectionEnvironmentRow";
 import { EnvironmentListCard } from "./EnvironmentListContent";
 
@@ -27,7 +29,12 @@ export function LocalEnvironmentList({
   readonly expandedId: EnvironmentId | null;
   readonly onToggle: (environmentId: EnvironmentId) => void;
 }) {
+  const gt = useGT();
+  const connectionsReady = useConnectionsReady();
   if (environments.length === 0) {
+    if (!connectionsReady) {
+      return <ContentStatus loading detail={gt("Loading environments")} />;
+    }
     return (
       <View
         collapsable={false}

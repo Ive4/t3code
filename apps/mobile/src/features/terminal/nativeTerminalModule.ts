@@ -27,6 +27,7 @@ interface TerminalResizeEvent {
 
 export interface NativeTerminalSurfaceProps extends ViewProps {
   readonly ref?: Ref<NativeTerminalSurfaceHandle>;
+  readonly onSurfaceUnavailable?: () => void;
   readonly appearanceScheme?: "light" | "dark";
   readonly autoFocus?: boolean;
   readonly readOnly?: boolean;

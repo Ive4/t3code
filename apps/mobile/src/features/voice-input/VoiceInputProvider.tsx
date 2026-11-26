@@ -66,7 +66,11 @@ export const localVoiceTranscriberAtom = makePermissionStatusAtom<
   read: () => getLocalVoiceTranscriber().catch(() => null),
 }).pipe(Atom.keepAlive);
 
-const voiceInputAvailableAtom = Atom.make((get) => {
+// Harmony input methods own their voice input button and expose no app trigger for it.
+const appVoiceInputEnabled = () => String(Platform.OS) !== "harmony";
+
+export const voiceInputAvailableAtom = Atom.make((get) => {
+  if (!appVoiceInputEnabled()) return false;
   const route = get(voiceRouteAtom);
   if (route) return route.transcriber !== null;
   const transcriber = get(localVoiceTranscriberAtom);
@@ -179,7 +183,8 @@ export function useGlobalVoiceInput() {
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot);
   return {
     ...snapshot,
-    isAvailable: isTranscriberAvailable || getNativeShowcaseScene() !== null,
+    isAvailable:
+      isTranscriberAvailable || (appVoiceInputEnabled() && getNativeShowcaseScene() !== null),
     audioLevels,
     isBusy: voiceInputBlocksSubmission(snapshot.state),
     session,

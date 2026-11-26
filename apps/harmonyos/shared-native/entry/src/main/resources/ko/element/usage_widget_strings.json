@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "usage_widget_title",
+      "value": "남은 구독량"
+    },
+    {
+      "name": "usage_widget_refresh",
+      "value": "새로 고치려면 T3을(를) 여세요"
+    }
+  ]
+}

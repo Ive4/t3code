@@ -237,8 +237,12 @@ function fallbackName(uri: string, index: number, mimeType: string): string {
   return `shared-${kind}-${index + 1}.${extension}`;
 }
 
+export type IncomingSharePayload = SharePayload & {
+  readonly stagingIssue?: { readonly maxBytes?: number };
+};
+
 export async function buildIncomingShareDraft(input: {
-  readonly payloads: ReadonlyArray<SharePayload>;
+  readonly payloads: ReadonlyArray<IncomingSharePayload>;
   readonly resolvedPayloads: ReadonlyArray<ResolvedSharePayload>;
   readonly fileReader: IncomingShareFileReader;
   readonly id: string;
@@ -250,6 +254,15 @@ export async function buildIncomingShareDraft(input: {
   let warnedAttachmentLimit = false;
 
   for (const [index, payload] of input.payloads.entries()) {
+    if (payload.stagingIssue) {
+      const { maxBytes } = payload.stagingIssue;
+      warnings.push(
+        maxBytes !== undefined && payload.originalName
+          ? fileAttachmentTooLargeMessage(payload.originalName, maxBytes, m)
+          : m(msg("One shared file could not be read.")),
+      );
+      continue;
+    }
     if (
       payload.shareType !== "image" &&
       payload.shareType !== "file" &&

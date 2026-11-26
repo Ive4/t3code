@@ -7,7 +7,7 @@ import {
   exchangeBody, mergeMessages, readMessage, readMessages, readThreads, subscribeRequest,
 } from './T3Protocol';
 import type {
-  NativeMessage, NativeThread, NativeThreadAttachment, RpcFrame, ThreadMessageContext, ThreadStreamItem,
+  NativeMessage, NativeThread, NativeThreadAttachment, RpcFrame, RpcRequest, ThreadMessageContext, ThreadStreamItem,
 } from './T3Protocol';
 import {
   composerPathSearchRequest, composerProviderCatalogRequest, matchComposerPullRequests,
@@ -98,6 +98,17 @@ import { projectBrowseRequest, projectManagementRequest, readManagedProject, rea
   readProjectFolderListing, supportsProjectOrganization } from './ProjectManagementProtocol';
 import type { NativeManagedProject, NativeProjectFolderListing, ProjectManagementChange,
   ProjectManagementSnapshot } from './ProjectManagementProtocol';
+import {
+  buildEnvironmentSettingsPatchRequest, readEnvironmentPreferences,
+} from './EnvironmentPreferencesProtocol';
+import type { EnvironmentPreferencesSnapshot } from './EnvironmentPreferencesProtocol';
+import { buildProviderEnabledPatchRequest, readProvidersSummary } from './ProvidersProtocol';
+import type { NativeProviderSummary } from './ProvidersProtocol';
+import {
+  buildScheduledTaskDeleteRequest, buildScheduledTaskRunNowRequest, buildScheduledTaskSetEnabledRequest,
+  buildScheduledTaskUpsertRequest, readScheduledTasksSnapshot,
+} from './ScheduledTasksProtocol';
+import type { NativeScheduledTask, ScheduledTaskUpsertDraft } from './ScheduledTasksProtocol';
 import { archivedThreadSnapshotRequest, threadLifecycleRequest, threadVisitRequest } from './ThreadLifecycleProtocol';
 import type { ThreadLifecycleAction } from './ThreadLifecycleProtocol';
 import {
@@ -2157,5 +2168,102 @@ export class T3Client {
       await socket.send(JSON.stringify(request));
     }).catch((error: Error) => fail(error));
     return stop;
+  }
+
+  async readEnvironmentPreferences(): Promise<EnvironmentPreferencesSnapshot> {
+    const emptyPayload: Record<string, Object> = {};
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: 'server.getConfig', payload: emptyPayload, headers: [],
+    };
+    const frame = await this.rpc(
+      request, '无法读取环境配置。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+    return readEnvironmentPreferences(frame.exit?.value as Object | null | undefined);
+  }
+
+  async updateEnvironmentSettings(rawPatch: Record<string, Object | null | undefined>): Promise<void> {
+    const canWrite = await this.canWriteModelCatalogPreferences();
+    if (!canWrite) throw new Error('环境未授权修改配置。');
+    const req = buildEnvironmentSettingsPatchRequest(rawPatch);
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: req.method, payload: req.params, headers: [],
+    };
+    await this.rpc(
+      request, '无法保存环境配置。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+  }
+
+  async listProviders(): Promise<NativeProviderSummary[]> {
+    const emptyPayload: Record<string, Object> = {};
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: 'server.getConfig', payload: emptyPayload, headers: [],
+    };
+    const frame = await this.rpc(
+      request, '无法读取提供商列表。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+    return readProvidersSummary(frame.exit?.value as Object | null | undefined);
+  }
+
+  async setProviderEnabled(instanceId: string, enabled: boolean, driver?: string): Promise<void> {
+    const canWrite = await this.canWriteModelCatalogPreferences();
+    if (!canWrite) throw new Error('环境未授权修改提供商状态。');
+    const req = buildProviderEnabledPatchRequest(instanceId, enabled, driver);
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: req.method, payload: req.params, headers: [],
+    };
+    await this.rpc(
+      request, '无法更新提供商状态。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+  }
+
+  async listScheduledTasks(): Promise<NativeScheduledTask[]> {
+    const emptyPayload: Record<string, Object> = {};
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: 'scheduledTasks.subscribe', payload: emptyPayload, headers: [],
+    };
+    const frame = await this.rpc(
+      request, '无法读取定时任务列表。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+    return readScheduledTasksSnapshot(frame.exit?.value as Object | null | undefined);
+  }
+
+  async upsertScheduledTask(draft: ScheduledTaskUpsertDraft): Promise<void> {
+    const req = buildScheduledTaskUpsertRequest(draft);
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: req.method, payload: req.params, headers: [],
+    };
+    await this.rpc(
+      request, '无法保存定时任务。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+  }
+
+  async setScheduledTaskEnabled(taskId: string, enabled: boolean): Promise<void> {
+    const req = buildScheduledTaskSetEnabledRequest(taskId, enabled);
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: req.method, payload: req.params, headers: [],
+    };
+    await this.rpc(
+      request, '无法切换定时任务状态。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+  }
+
+  async deleteScheduledTask(taskId: string): Promise<void> {
+    const req = buildScheduledTaskDeleteRequest(taskId);
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: req.method, payload: req.params, headers: [],
+    };
+    await this.rpc(
+      request, '无法删除定时任务。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
+  }
+
+  async runScheduledTaskNow(taskId: string): Promise<void> {
+    const req = buildScheduledTaskRunNowRequest(taskId);
+    const request: RpcRequest = {
+      _tag: 'Request', id: REQUEST_ID, tag: req.method, payload: req.params, headers: [],
+    };
+    await this.rpc(
+      request, '无法立即运行定时任务。', false, undefined, NETWORK_TIMEOUT_MS,
+    );
   }
 }

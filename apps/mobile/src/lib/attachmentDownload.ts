@@ -175,7 +175,7 @@ export async function openAttachmentInViewer(input: {
   readonly signal: AbortSignal;
 }): Promise<void> {
   const { File } = await import("expo-file-system");
-  const { requireNativeModule } = await import("expo");
+  const { openFile } = await import("./nativeFileActions");
   if (input.signal.aborted) return;
   const cached = await createCachedAttachmentFile(input.attachment);
   try {
@@ -187,9 +187,7 @@ export async function openAttachmentInViewer(input: {
     if (input.signal.aborted) return;
     const endHandoff = beginForegroundHandoff();
     try {
-      await requireNativeModule<{ openFile(uri: string, mimeType: string): Promise<void> }>(
-        "T3NativeControls",
-      ).openFile(
+      await openFile(
         cached.file.uri,
         input.attachment.mimeType.split(";", 1)[0]?.trim() || "application/octet-stream",
       );
@@ -207,6 +205,7 @@ export async function downloadAttachmentForPreview(input: {
   readonly url: string;
   readonly attachment: AttachmentFileMetadata;
   readonly signal: AbortSignal;
+  readonly headers?: Record<string, string>;
 }): Promise<AttachmentPreviewFile | null> {
   if (input.signal.aborted) return null;
   const { File } = await import("expo-file-system");
@@ -216,7 +215,10 @@ export async function downloadAttachmentForPreview(input: {
       cached.preview.dispose();
       return null;
     }
-    await File.downloadFileAsync(input.url, cached.file, { signal: input.signal });
+    await File.downloadFileAsync(input.url, cached.file, {
+      signal: input.signal,
+      ...(input.headers ? { headers: input.headers } : {}),
+    });
     if (input.signal.aborted) {
       cached.preview.dispose();
       return null;

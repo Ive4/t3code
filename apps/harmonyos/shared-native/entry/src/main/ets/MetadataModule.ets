@@ -19,6 +19,10 @@ interface DeviceMetadata {
 }
 
 export class MetadataModule extends UITurboModule {
+  public is24HourFormat(): boolean {
+    return i18n.System.is24HourClock();
+  }
+
   public application(): ApplicationMetadata {
     const bundle = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
     return {

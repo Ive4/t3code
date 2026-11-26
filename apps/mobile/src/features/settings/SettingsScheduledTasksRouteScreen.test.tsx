@@ -19,8 +19,18 @@ vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
   View: Children,
   TextInput: () => null,
-  Pressable: ({ children, onPress }: { children?: ReactNode; onPress: () => void }) => (
-    <button onClick={onPress}>{children}</button>
+  Pressable: ({
+    children,
+    onPress,
+    accessibilityLabel,
+  }: {
+    children?: ReactNode;
+    onPress: () => void;
+    accessibilityLabel?: string;
+  }) => (
+    <button onClick={onPress} aria-label={accessibilityLabel}>
+      {children}
+    </button>
   ),
 }));
 vi.mock("@react-navigation/native", () => ({
@@ -28,7 +38,30 @@ vi.mock("@react-navigation/native", () => ({
   usePreventRemove: () => {},
 }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
-vi.mock("@expo/ui/community/datetime-picker", () => ({ DateTimePicker: () => null }));
+vi.mock("@expo/ui/community/datetime-picker", () => ({
+  DateTimePicker: ({
+    value,
+    onValueChange,
+    onDismiss,
+  }: {
+    value: Date;
+    onValueChange: (event: undefined, value: Date) => void;
+    onDismiss: () => void;
+  }) => (
+    <>
+      <button
+        onClick={() => {
+          const selected = new Date(value);
+          selected.setHours(0, 15, 0, 0);
+          onValueChange(undefined, selected);
+        }}
+      >
+        Pick midnight
+      </button>
+      <button onClick={onDismiss}>Dismiss picker</button>
+    </>
+  ),
+}));
 vi.mock("../../components/ui/Dialog", () => ({ alert: mocks.alert }));
 vi.mock("../../components/ui/AppText", () => ({ AppText: Children }));
 vi.mock("../../components/ui/AppSymbol", () => ({ SymbolView: () => null }));
@@ -129,7 +162,7 @@ vi.mock("../../state/server", () => ({
   },
 }));
 vi.mock("../../state/query", () => ({
-  useEnvironmentQuery: () => ({ data: { tasks: mocks.tasks, threads: [] } }),
+  useEnvironmentQuery: () => ({ data: { tasks: mocks.tasks, threads: [], timeZone: "Etc/UTC" } }),
 }));
 vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => mocks.upsert }));
 vi.mock("../../state/queries", () => ({
@@ -205,6 +238,21 @@ function button(label: string) {
   return element;
 }
 describe("scheduled task batched edits", () => {
+  it("saves a recurring clock time unchanged in the server's timezone", async () => {
+    const time = container.querySelector<HTMLButtonElement>('button[aria-label^="Time,"]');
+    expect(time?.getAttribute("aria-label")).toContain("UTC");
+    act(() => time?.click());
+    act(() => button("Pick midnight").click());
+    act(() => button("Dismiss picker").click());
+    await act(async () => button("Save changes").click());
+    expect(mocks.upsert).toHaveBeenCalledExactlyOnceWith({
+      environmentId: "environment",
+      input: expect.objectContaining({
+        schedule: { type: "fixed_time", timeOfDay: "00:15" },
+      }),
+    });
+  });
+
   it("submits the selected interval when saved before React commits", async () => {
     await act(async () => {
       button("Interval").click();

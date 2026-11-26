@@ -71,73 +71,62 @@ export function DiffTokenText(props: {
   readonly className?: string;
   readonly fontSize?: number;
   readonly lineHeight?: number;
+  readonly color?: string;
+  readonly wordWrap?: boolean;
+  readonly selectable?: boolean;
 }) {
   const fontSize = props.fontSize ?? MOBILE_CODE_SURFACE.fontSize;
   const lineHeight = props.lineHeight ?? MOBILE_CODE_SURFACE.rowHeight;
-  if (!props.tokens || props.tokens.length === 0) {
-    return (
-      <NativeText
-        numberOfLines={1}
-        selectable
-        className={cn("font-normal text-foreground", props.className)}
-        style={{
-          fontFamily: REVIEW_MONO_FONT_FAMILY,
-          fontSize,
-          lineHeight,
-        }}
-      >
-        {renderVisibleWhitespace(props.fallback || " ")}
-      </NativeText>
-    );
-  }
-
   return (
     <NativeText
-      numberOfLines={1}
-      selectable
+      numberOfLines={props.wordWrap ? undefined : 1}
+      selectable={props.selectable ?? true}
       className={cn("font-normal text-foreground", props.className)}
       style={{
+        color: props.color,
         fontFamily: REVIEW_MONO_FONT_FAMILY,
         fontSize,
         lineHeight,
       }}
     >
-      {(() => {
-        const starts = tokenStartOffsets(props.tokens);
+      {props.tokens && props.tokens.length > 0
+        ? (() => {
+            const starts = tokenStartOffsets(props.tokens);
 
-        return props.tokens.map((token, index) => {
-          const start = starts[index]!;
+            return props.tokens.map((token, index) => {
+              const start = starts[index]!;
 
-          const fontWeight =
-            token.fontStyle !== null && (token.fontStyle & 2) === 2
-              ? ("700" as const)
-              : ("500" as const);
-          const fontStyle =
-            token.fontStyle !== null && (token.fontStyle & 1) === 1
-              ? ("italic" as const)
-              : ("normal" as const);
+              const fontWeight =
+                token.fontStyle !== null && (token.fontStyle & 2) === 2
+                  ? ("700" as const)
+                  : ("500" as const);
+              const fontStyle =
+                token.fontStyle !== null && (token.fontStyle & 1) === 1
+                  ? ("italic" as const)
+                  : ("normal" as const);
 
-          return (
-            <NativeText
-              key={`${start}:${token.content.length}:${token.color ?? ""}:${token.fontStyle ?? ""}`}
-              selectable
-              style={{
-                color: token.color ?? undefined,
-                fontFamily: REVIEW_MONO_FONT_FAMILY,
-                fontWeight,
-                fontStyle,
-                backgroundColor:
-                  token.diffHighlight && props.change
-                    ? diffHighlightColor(props.change)
-                    : undefined,
-                borderRadius: token.diffHighlight ? 4 : undefined,
-              }}
-            >
-              {token.content.length > 0 ? renderVisibleWhitespace(token.content) : " "}
-            </NativeText>
-          );
-        });
-      })()}
+              return (
+                <NativeText
+                  key={`${start}:${token.content.length}:${token.color ?? ""}:${token.fontStyle ?? ""}`}
+                  selectable={props.selectable ?? true}
+                  style={{
+                    color: token.color ?? undefined,
+                    fontFamily: REVIEW_MONO_FONT_FAMILY,
+                    fontWeight,
+                    fontStyle,
+                    backgroundColor:
+                      token.diffHighlight && props.change
+                        ? diffHighlightColor(props.change)
+                        : undefined,
+                    borderRadius: token.diffHighlight ? 4 : undefined,
+                  }}
+                >
+                  {token.content.length > 0 ? renderVisibleWhitespace(token.content) : " "}
+                </NativeText>
+              );
+            });
+          })()
+        : renderVisibleWhitespace(props.fallback || " ")}
     </NativeText>
   );
 }

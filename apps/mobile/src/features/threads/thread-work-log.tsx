@@ -36,6 +36,7 @@ import {
 import {
   Animated as NativeAnimated,
   type ColorValue,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -116,6 +117,7 @@ import { startShimmerSteps } from "./work-shimmer-steps";
 
 const SHIMMER_WIDTH = 72;
 const SHIMMER_ICON_AND_GAP_WIDTH = 30;
+const IS_HARMONY = String(Platform.OS) === "harmony";
 export const THREAD_DISCLOSURE_TRANSITION_MS = 180;
 const WORK_LOG_LAYOUT_TRANSITION = LinearTransition.duration(THREAD_DISCLOSURE_TRANSITION_MS);
 const WORK_LOG_DETAIL_ENTER_TRANSITION = FadeIn.duration(140);
@@ -178,6 +180,7 @@ export function ThreadDisclosureChevron(props: {
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- drives the chevron's Reanimated rotation value when the expanded state changes
   useLayoutEffect(() => {
+    if (IS_HARMONY) return;
     rotation.set(
       withTiming(props.expanded ? expandedAngle : 0, {
         duration: THREAD_DISCLOSURE_TRANSITION_MS,
@@ -196,7 +199,12 @@ export function ThreadDisclosureChevron(props: {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       pointerEvents="none"
-      style={[{ width: props.size, height: props.size }, rotationStyle]}
+      style={[
+        { width: props.size, height: props.size },
+        IS_HARMONY
+          ? { transform: [{ rotate: `${props.expanded ? expandedAngle : 0}deg` }] }
+          : rotationStyle,
+      ]}
     >
       <SymbolView
         name={props.collapsedDirection === "right" ? "chevron.right" : "chevron.down"}
@@ -818,7 +826,7 @@ function ToolCodeText({
   readonly language: "typescript" | "html" | "json";
   readonly theme: "light" | "dark";
 }) {
-  const lines = useMarkdownCodeHighlight({ code, language, theme, enabled: true });
+  const lines = useMarkdownCodeHighlight({ code, language, theme, enabled: !IS_HARMONY });
   return <HighlightedCodeText code={code} lines={lines} />;
 }
 
@@ -831,7 +839,7 @@ function CommandCodeText({
 }) {
   const code = withVisibleControlCharacters(command.trim());
   const lines = useMemo(
-    () => highlightCommand(code, commandHighlightLanguage(code), theme),
+    () => (IS_HARMONY ? null : highlightCommand(code, commandHighlightLanguage(code), theme)),
     [code, theme],
   );
   return <HighlightedCodeText code={code} lines={lines} />;
@@ -1086,9 +1094,9 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
 
   return (
     <Animated.View
-      layout={WORK_LOG_LAYOUT_TRANSITION}
+      layout={IS_HARMONY ? undefined : WORK_LOG_LAYOUT_TRANSITION}
       className="overflow-hidden"
-      {...(isFreshRow(row.createdAt) ? { entering: FadeIn.duration(200) } : {})}
+      {...(!IS_HARMONY && isFreshRow(row.createdAt) ? { entering: FadeIn.duration(200) } : {})}
     >
       <WorkLogPressable
         accessibilityRole={
@@ -1251,9 +1259,9 @@ const ThreadWorkLogRow = function ThreadWorkLogRow(
         outputImages.length > 0 ||
         row.workEntry.questionAnswer) ? (
         <Animated.View
-          entering={WORK_LOG_DETAIL_ENTER_TRANSITION}
-          exiting={WORK_LOG_DETAIL_EXIT_TRANSITION}
-          layout={WORK_LOG_LAYOUT_TRANSITION}
+          entering={IS_HARMONY ? undefined : WORK_LOG_DETAIL_ENTER_TRANSITION}
+          exiting={IS_HARMONY ? undefined : WORK_LOG_DETAIL_EXIT_TRANSITION}
+          layout={IS_HARMONY ? undefined : WORK_LOG_LAYOUT_TRANSITION}
           className={reasoning ? "ml-7 py-1" : "pb-1 pt-0.5"}
         >
           {row.workEntry.questionAnswer ? (

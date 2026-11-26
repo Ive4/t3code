@@ -54,6 +54,7 @@ import { useReviewFileVisibility } from "./reviewFileVisibility";
 import { useReviewSections } from "./useReviewSections";
 import { useNativeReviewDiffBridge } from "./useNativeReviewDiffBridge";
 import { useReviewCommentSelectionController } from "./useReviewCommentSelectionController";
+import { ReviewDiffFallback } from "./ReviewDiffFallback";
 import { resolveReviewAvailability } from "./reviewAvailability";
 import { resolveSelectedReviewFileId } from "./reviewPaneSelection";
 import { buildReviewSectionMenu } from "./review-section-menu";
@@ -70,6 +71,7 @@ function ReviewHeader(
     readonly onSelectRepository: (key: string | null) => void;
     readonly fileFilter: ReturnType<typeof usePullRequestFileFilter>;
     readonly onSelectSection: (sectionId: string) => void;
+    readonly fileJumpItems: ReadonlyArray<AppBarMenuItem>;
     readonly onReturnToThread: () => void;
   },
 ) {
@@ -183,6 +185,15 @@ function ReviewHeader(
                     : []),
                   ...(presentation.refreshAction ? [presentation.refreshAction] : []),
                 ],
+              },
+            ]
+          : []),
+        ...(props.fileJumpItems.length
+          ? [
+              {
+                title: gt("Changed files"),
+                icon: "list.number" as const,
+                items: props.fileJumpItems,
               },
             ]
           : []),
@@ -519,7 +530,8 @@ export function ReviewSheet(props: ReviewSheetProps) {
     collapsedFileIds,
     viewedFileIds,
     selectedRowIds: commentSelection.selectedRowIds,
-    canHighlight: parsedDiff.kind === "files",
+    canHighlight: NativeReviewDiffView !== null && parsedDiff.kind === "files",
+    serializeRows: NativeReviewDiffView !== null,
   });
   const showcaseReviewKey =
     SHOWCASE_ENABLED && parsedDiff.kind === "files" && selectedSection
@@ -561,11 +573,9 @@ export function ReviewSheet(props: ReviewSheetProps) {
       console.error("[review] Failed to navigate to diff file", squashAtomCommandFailure(result));
     }
   };
-  const handleVisibleFileChange = (
-    event: NativeSyntheticEvent<{ readonly fileId?: string | null }>,
-  ) => {
-    loadVisibleFile(event.nativeEvent.fileId ?? null);
-    reviewFileNavigatorRef.current?.setVisibleFile(event.nativeEvent.fileId ?? null);
+  const handleVisibleFileChange = (fileId: string | null) => {
+    loadVisibleFile(fileId);
+    reviewFileNavigatorRef.current?.setVisibleFile(fileId);
   };
   const renderInspector = () => (
     <ReviewFileNavigator
@@ -576,12 +586,13 @@ export function ReviewSheet(props: ReviewSheetProps) {
     />
   );
 
+  const handleToggleFile = (fileId: string) => {
+    loadVisibleFile(fileId, true);
+    toggleExpandedFile(fileId);
+  };
   const handleNativeToggleFile = (event: NativeSyntheticEvent<{ readonly fileId?: string }>) => {
     const { fileId } = event.nativeEvent;
-    if (fileId) {
-      loadVisibleFile(fileId, true);
-      toggleExpandedFile(fileId);
-    }
+    if (fileId) handleToggleFile(fileId);
   };
 
   const handleNativeToggleViewedFile = (
@@ -627,10 +638,7 @@ export function ReviewSheet(props: ReviewSheetProps) {
     .join(" · ");
 
   const showChangedFilesPane =
-    !showConnectionNotice &&
-    selectedSection !== null &&
-    parsedDiff.kind === "files" &&
-    NativeReviewDiffView !== null;
+    !showConnectionNotice && selectedSection !== null && parsedDiff.kind === "files";
   const showChangedFilesToggle = panes.supportsAuxiliaryPane && showChangedFilesPane;
 
   const allFilesHidden = reviewFiles.length === 0 && fileFilter.hiddenCount > 0;
@@ -723,6 +731,15 @@ export function ReviewSheet(props: ReviewSheetProps) {
         fileFilter={fileFilter}
         onRefresh={handlePullToRefresh}
         onSelectSection={selectSection}
+        fileJumpItems={
+          showChangedFilesPane && !showChangedFilesToggle && NativeReviewDiffView === null
+            ? nativeReviewDiffData.files.map((file) => ({
+                id: file.id,
+                title: file.path,
+                onPress: () => void handleSelectFile(file.id),
+              }))
+            : []
+        }
         onReturnToThread={handleReturnToThread}
       />
 
@@ -789,13 +806,44 @@ export function ReviewSheet(props: ReviewSheetProps) {
                     viewedFileIdsJson={nativeBridge.viewedFileIdsJson}
                     onDebug={handleNativeDebug}
                     onPressLine={commentSelection.onPressLine}
-                    onVisibleFileChange={handleVisibleFileChange}
+                    onVisibleFileChange={(event) =>
+                      handleVisibleFileChange(event.nativeEvent.fileId ?? null)
+                    }
                     onToggleComment={nativeBridge.onToggleComment}
                     onToggleFile={handleNativeToggleFile}
                     onToggleViewedFile={handleNativeToggleViewedFile}
                   />
                 </View>
               </View>
+            </View>
+          ) : showChangedFilesPane && !allFilesHidden ? (
+            <View
+              className="flex-1"
+              style={{
+                paddingTop: topContentInset,
+                backgroundColor: nativeBridge.theme.background,
+              }}
+            >
+              <ReviewDiffFallback
+                key={`${reviewCache.threadKey}:${reviewContentKey}`}
+                ref={nativeReviewDiffViewRef}
+                rows={nativeReviewDiffData.rows}
+                files={nativeReviewDiffData.files}
+                scheme={selectedTheme}
+                collapsedFileIds={collapsedFileIds}
+                viewedFileIds={viewedFileIds}
+                selectedRowIds={commentSelection.selectedRowIds}
+                theme={nativeBridge.theme}
+                diffStyle={nativeReviewDiffStyle}
+                listHeader={listHeader}
+                bottomInset={bottomContentInset}
+                refreshing={isRefreshing}
+                onRefresh={() => void handlePullToRefresh()}
+                onVisibleFileChange={handleVisibleFileChange}
+                onToggleFile={handleToggleFile}
+                onToggleViewedFile={toggleViewedFile}
+                onPressLine={commentSelection.pressLine}
+              />
             </View>
           ) : (
             <ScrollView
@@ -813,7 +861,6 @@ export function ReviewSheet(props: ReviewSheetProps) {
               showsVerticalScrollIndicator={false}
               className="flex-1"
               refreshControl={
-                // Fallback and empty states need refresh controls; only Android has an explicit refresh menu.
                 <RefreshControl
                   refreshing={isRefreshing}
                   onRefresh={() => void handlePullToRefresh()}
@@ -846,17 +893,6 @@ export function ReviewSheet(props: ReviewSheetProps) {
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false}>
                     <Text selectable className="font-mono text-xs leading-relaxed text-foreground">
                       {parsedDiff.text}
-                    </Text>
-                  </ScrollView>
-                </ContentBand>
-              ) : parsedDiff.kind === "files" && !allFilesHidden ? (
-                <ContentBand spacing="roomy">
-                  <Text className="text-xs leading-normal text-foreground-muted">
-                    <T>Native diff view unavailable. Showing the raw patch.</T>
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false}>
-                    <Text selectable className="font-mono text-xs leading-relaxed text-foreground">
-                      {selectedSection?.diff ?? ""}
                     </Text>
                   </ScrollView>
                 </ContentBand>

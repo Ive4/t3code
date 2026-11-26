@@ -326,6 +326,38 @@ export function buildSubscriptionUsageSnapshot(
   };
 }
 
+export function createHarmonyUsageWidgetData(snapshot: SubscriptionUsageSnapshot) {
+  const text = snapshot.text ?? subscriptionUsageText(m, 0);
+  const rows = snapshot.providers.flatMap(({ name, windows, expiresAt }) => {
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) return [];
+    const primary = new Set([
+      windows.find((window) => window.kind === "session"),
+      windows.find((window) => window.kind === "weekly"),
+      ...windows,
+    ]);
+    return [...primary]
+      .filter((window) => window !== undefined)
+      .slice(0, 2)
+      .map(({ label, remaining }) => ({
+        label: `${name} · ${text.windowPercentLeft
+          .replace("{remaining}", String(remaining))
+          .replace("{window}", () => label)}`,
+        remaining,
+        expiresAt,
+      }));
+  });
+  return {
+    title: text.subscriptionRemaining,
+    empty: snapshot.checkedAt > 0 && rows.length === 0 ? text.refresh : text.noLimits,
+    refresh: text.refresh,
+    asOf:
+      rows.length > 0 && snapshot.checkedAt > 0
+        ? text.asOf.replace("{time}", () => clockLabel(snapshot.checkedAt, Date.now()))
+        : "",
+    rows,
+  };
+}
+
 export function subscriptionUsageTimeline(snapshot: SubscriptionUsageSnapshot, now: number) {
   const deadlines = [...new Set(snapshot.providers.map((p) => p.expiresAt))]
     .filter((deadline) => deadline > now)

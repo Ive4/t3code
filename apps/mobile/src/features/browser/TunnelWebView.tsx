@@ -1,5 +1,5 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import { requireNativeModule, requireNativeView } from "expo";
+import { requireNativeView, requireOptionalNativeModule } from "expo";
 import { useRef, type Ref } from "react";
 import {
   Platform,
@@ -31,30 +31,34 @@ export interface TunnelWebViewRef {
   readonly reload: () => Promise<void>;
 }
 
-const PreviewTunnel = requireNativeModule<{
+const PreviewTunnel = requireOptionalNativeModule<{
   resolveAccess(requestId: string, url: string | null): void;
 }>("T3PreviewTunnel");
 
-const NativeTunnelWebView = requireNativeView<
-  ViewProps & {
-    readonly ref?: Ref<TunnelWebViewRef>;
-    readonly environmentId: string;
-    readonly url: string;
-    readonly topInset?: number;
-    readonly onAccessRequest: (event: NativeSyntheticEvent<{ requestId: string }>) => void;
-    readonly onNavigationChange: (event: NativeSyntheticEvent<TunnelNavigation>) => void;
-    readonly onLoadError: (
-      event: NativeSyntheticEvent<{
-        code: number;
-        description: string;
-        url: string;
-        debug?: string;
-        cause?: string;
-      }>,
-    ) => void;
-    readonly onPageScroll: (event: NativeSyntheticEvent<{ y: number }>) => void;
-  }
->("T3PreviewTunnel");
+export const supportsNativePreviewTunnel = PreviewTunnel !== null;
+
+const NativeTunnelWebView = supportsNativePreviewTunnel
+  ? requireNativeView<
+      ViewProps & {
+        readonly ref?: Ref<TunnelWebViewRef>;
+        readonly environmentId: string;
+        readonly url: string;
+        readonly topInset?: number;
+        readonly onAccessRequest: (event: NativeSyntheticEvent<{ requestId: string }>) => void;
+        readonly onNavigationChange: (event: NativeSyntheticEvent<TunnelNavigation>) => void;
+        readonly onLoadError: (
+          event: NativeSyntheticEvent<{
+            code: number;
+            description: string;
+            url: string;
+            debug?: string;
+            cause?: string;
+          }>,
+        ) => void;
+        readonly onPageScroll: (event: NativeSyntheticEvent<{ y: number }>) => void;
+      }
+    >("T3PreviewTunnel")
+  : null;
 
 /** A native webview whose localhost is the environment's loopback, reached through its tunnel. */
 export function TunnelWebView({
@@ -96,6 +100,7 @@ export function TunnelWebView({
   readonly onScrollDirection?: (direction: "up" | "down") => void;
 }) {
   const scrollY = useRef(0);
+  if (NativeTunnelWebView === null || PreviewTunnel === null) return null;
   // Styling goes on a plain View: a native view from `requireNativeView` ignores className.
   return (
     <View {...props}>

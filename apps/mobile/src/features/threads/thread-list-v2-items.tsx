@@ -90,6 +90,7 @@ import {
   resolveThreadListV2SwipeActions,
   layoutThreadListV2RowMenuActions,
   threadListV2RowAccessibilityLabel,
+  type ThreadListV2InboxSection,
   type ThreadListV2Status,
 } from "./threadListV2";
 import { QueuedMessageIcon } from "./queued-message-icon";
@@ -124,6 +125,12 @@ const STATUS_LABEL_BY_STATUS: Partial<Record<ThreadListV2Status, StatusLabel>> =
     icon: "person.crop.circle",
     className: "text-adaptive-fuchsia-600-300",
     iconTintClassName: "accent-adaptive-fuchsia-600-300",
+  },
+  plan: {
+    label: msg("Plan ready", { $context: "thread status, proposed plan is ready for review" }),
+    icon: "doc.text",
+    className: "text-adaptive-indigo-600-300",
+    iconTintClassName: "accent-adaptive-indigo-600-300",
   },
   working: {
     label: null,
@@ -255,6 +262,7 @@ function ThreadListV2Section(props: {
   const content = (
     <>
       <Text
+        accessibilityRole={props.disclosure ? undefined : "header"}
         className={cn(
           "text-xs font-t3-medium",
           sidebarPane
@@ -317,6 +325,20 @@ const ThreadListV2SectionDivider = memo(function ThreadListV2SectionDivider(prop
 }) {
   return <ThreadListV2Section {...props} />;
 });
+
+const INBOX_SECTION_LABELS = {
+  attention: msg("Needs attention", { $context: "chat list section" }),
+  unread: msg("Unread results", { $context: "chat list section" }),
+  recent: msg("Recent chats", { $context: "chat list section" }),
+} satisfies Record<ThreadListV2InboxSection, string>;
+
+export function ThreadListV2InboxHeading(props: {
+  readonly section: ThreadListV2InboxSection;
+  readonly pane?: "screen" | "sidebar";
+}) {
+  const m = useMessages();
+  return <ThreadListV2Section label={m(INBOX_SECTION_LABELS[props.section])} pane={props.pane} />;
+}
 
 type ThreadListV2ShelfHeaderProps = {
   readonly count: number;

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import type { SharePayload } from "expo-sharing";
 
-import { createIncomingSharePayloadReader } from "./incoming-share-native";
+import { createIncomingSharePayloadReader, startNativeShareInbox } from "./incoming-share-native";
 
 describe("createIncomingSharePayloadReader", () => {
   it("treats a missing iOS App Group as an unavailable inbox", () => {
@@ -28,5 +28,48 @@ describe("createIncomingSharePayloadReader", () => {
     });
 
     expect(read).toThrow(error);
+  });
+});
+
+describe("startNativeShareInbox", () => {
+  it("checks pending shares after subscribing and refreshes on resume and native delivery", () => {
+    const events = new EventTarget();
+    const refresh = vi.fn();
+    const stop = startNativeShareInbox({
+      enabled: true,
+      refresh,
+      subscribeAppActive: (listener) => {
+        events.addEventListener("resume", listener);
+        return () => events.removeEventListener("resume", listener);
+      },
+      subscribeNativeShare: (listener) => {
+        events.addEventListener("share", listener);
+        return () => events.removeEventListener("share", listener);
+      },
+    });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    events.dispatchEvent(new Event("share"));
+    events.dispatchEvent(new Event("resume"));
+    expect(refresh).toHaveBeenCalledTimes(3);
+    stop();
+    events.dispatchEvent(new Event("share"));
+    events.dispatchEvent(new Event("resume"));
+    expect(refresh).toHaveBeenCalledTimes(3);
+  });
+
+  it("loads persisted drafts without subscribing when native receipt is unavailable", () => {
+    const refresh = vi.fn();
+    const subscribe = vi.fn(() => () => {});
+    const stop = startNativeShareInbox({
+      enabled: false,
+      refresh,
+      subscribeAppActive: subscribe,
+      subscribeNativeShare: subscribe,
+    });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(subscribe).not.toHaveBeenCalled();
+    stop();
   });
 });

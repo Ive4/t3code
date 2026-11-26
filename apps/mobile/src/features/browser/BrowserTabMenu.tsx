@@ -20,6 +20,7 @@ import { useEnvironmentPreviewTunnelOff } from "../../state/entities";
 import { previewEnvironment } from "../../state/preview";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { browserTabUrl, loopbackUrlForDevice } from "./browserTabs";
+import { supportsNativePreviewTunnel } from "./TunnelWebView";
 import { useOpenLocalPreview } from "./useOpenLocalPreview";
 
 const APPEARANCES = [
@@ -94,7 +95,8 @@ export function BrowserTabMenu({
     image: "xmark",
     attributes: { destructive: true, disabled: !canClose },
   };
-  const deviceUrl = tunnelOff ? null : loopbackUrlForDevice(browserTabUrl(tab));
+  const deviceUrl =
+    tunnelOff || !supportsNativePreviewTunnel ? null : loopbackUrlForDevice(browserTabUrl(tab));
   // The device preview has its own webview and tunnel, so it doesn't wait for the stream.
   const openOnDevice: MenuAction[] = deviceUrl
     ? [{ id: "open-on-device", title: gt("Open on this device"), image: "iphone" }]

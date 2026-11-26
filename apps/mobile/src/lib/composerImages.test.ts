@@ -34,6 +34,20 @@ const manipulator = vi.hoisted(() => {
   return { state, manipulate };
 });
 
+vi.mock("expo-image-picker", () => ({
+  launchImageLibraryAsync: async () => ({
+    canceled: false,
+    assets: [
+      {
+        uri: "file://media/Photo/2/IMG/photo.heic",
+        type: "image",
+        fileName: "photo.heic",
+        mimeType: "image/heic",
+      },
+    ],
+  }),
+}));
+
 vi.mock("expo-image-manipulator", () => ({
   ImageManipulator: { manipulate: manipulator.manipulate },
   SaveFormat: { JPEG: "jpeg", PNG: "png" },
@@ -125,7 +139,11 @@ vi.mock("./uuid", () => ({
   uuidv4: () => "attachment-id",
 }));
 
-import { convertPastedImagesToAttachments, persistComposerAttachmentFile } from "./composerImages";
+import {
+  convertPastedImagesToAttachments,
+  persistComposerAttachmentFile,
+  pickComposerMedia,
+} from "./composerImages";
 
 const STORED = "file:///documents/t3-composer-attachments/attachment-id";
 
@@ -137,6 +155,17 @@ function oversizedPng(): string {
   png.writeUInt32BE(2000, 20);
   return png.toString("base64");
 }
+
+it("removes the rendered gallery image after copying it to the draft", async () => {
+  files.clear();
+  manipulator.state.sourceSize = { width: 100, height: 100 };
+  manipulator.state.renderedBase64 = "cmVuZGVyZWQ=";
+
+  const { attachments } = await pickComposerMedia({ existingCount: 0 });
+
+  expect(attachments).toEqual([expect.objectContaining({ fileUri: `${STORED}-photo.jpg` })]);
+  expect(files.get("file:///cache/rendered.jpeg")?.deleted).toBe(true);
+});
 
 describe("native pasted image cleanup", () => {
   beforeEach(() => {

@@ -8,7 +8,7 @@ import type {
   ViewInstance,
   ViewStyle,
 } from "react-native";
-import { Pressable, ScrollView, View } from "react-native";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import { useKeyboardState } from "react-native-keyboard-controller";
 
 import { useHardwareBack } from "../../lib/backHandler";
@@ -17,7 +17,7 @@ import {
   deriveMenuVerticalPlacement,
 } from "../../lib/menu-placement";
 import { WindowHingeContext } from "../../native/window-hinge-context";
-import { OverlayPortal } from "./OverlayPortal";
+import { OverlayPortal, useModalOverlayScope } from "./OverlayPortal";
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
 import { MenuPopup } from "./MenuPopup";
 
@@ -165,6 +165,9 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
 
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
   const keyboardHeight = useKeyboardState((state) => state.height);
+  const inModal = useModalOverlayScope();
+  const inWindow =
+    inModal || String(Platform.OS) === "harmony" || anchor?.keyboardWasVisible === true;
   const close = () => {
     setAnchor(null);
     setPath([]);
@@ -187,14 +190,16 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
     });
   };
 
-  // Only the in-window (keyboard) presentation needs this; the native popup
-  // handles back itself.
-  useHardwareBack(anchor?.keyboardWasVisible === true, () => {
+  const handleBack = () => {
     if (path.length > 0) {
       setPath((current) => current.slice(0, -1));
     } else {
       close();
     }
+  };
+  // A scoped overlay handles Back through the native modal's close callback.
+  useHardwareBack(anchor !== null && inWindow && !inModal, () => {
+    handleBack();
     return true;
   });
 
@@ -293,7 +298,7 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
         </Pressable>
       )}
       {anchor === null ? null : (
-        <OverlayPortal>
+        <OverlayPortal onRequestClose={handleBack}>
           <View
             ref={overlayRef}
             collapsable={false}
@@ -301,7 +306,7 @@ export function AndroidAnchoredMenu(props: AndroidAnchoredMenuProps) {
             onLayout={measureOverlay}
           >
             <Pressable accessible={false} className="absolute inset-0" onPress={close} />
-            {local === null ? null : !anchor.keyboardWasVisible ? (
+            {local === null ? null : !inWindow ? (
               <MenuPopup
                 // Compose aligns to the trigger's start if it fits; hinge-safe triggers keep menus on their side.
                 anchor={windowHinge ? { ...local, x: left, width: menuWidth } : local}

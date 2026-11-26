@@ -290,8 +290,8 @@ export struct WorkspaceDock {
       this.Destination('settings', uiText(this.language, '设置', 'Settings'), $r('sys.symbol.gearshape'))
     }
     .width('100%')
-    .height(80)
     .backgroundColor(workspaceNavigationBarColor(this.dark))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     .accessibilityRole(AccessibilityRoleType.TAB_BAR)
   }
 }

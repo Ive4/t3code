@@ -32,3 +32,18 @@ export function createIncomingSharePayloadReader(input: {
     }
   };
 }
+
+export function startNativeShareInbox(input: {
+  readonly enabled: boolean;
+  readonly refresh: () => void;
+  readonly subscribeAppActive: (listener: () => void) => () => void;
+  readonly subscribeNativeShare?: (listener: () => void) => () => void;
+}): () => void {
+  const stopNativeShare = input.enabled ? input.subscribeNativeShare?.(input.refresh) : undefined;
+  const stopAppActive = input.enabled ? input.subscribeAppActive(input.refresh) : undefined;
+  input.refresh();
+  return () => {
+    stopAppActive?.();
+    stopNativeShare?.();
+  };
+}

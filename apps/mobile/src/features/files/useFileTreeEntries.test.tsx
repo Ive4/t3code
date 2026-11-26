@@ -302,6 +302,13 @@ function setup(withBrowser = false) {
 }
 
 describe("file tree workspace state", () => {
+  it("keeps the current workspace visit active across ordinary renders", () => {
+    using screen = setup(true);
+    screen.render();
+    screen.render();
+    expect(screen.rootQuery.refresh).toHaveBeenCalledOnce();
+  });
+
   it("retries failed folders once on reconnect", async () => {
     using screen = setup();
     screen.render();

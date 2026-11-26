@@ -13,6 +13,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 
 import { m } from "../../i18n/messages";
+import type { StoreAppUpdateClient } from "./store-app-updates";
 
 export type AppUpdateCheckState =
   | "idle"
@@ -59,6 +60,7 @@ const appUpdateDeferral = createAppUpdateDeferral();
 interface AppUpdateCheckOptions {
   readonly applyMode?: "background" | "immediate";
   readonly client?: AppUpdateClient;
+  readonly storeClient?: StoreAppUpdateClient;
   readonly deferral?: AppUpdateDeferral;
   readonly environment?: AppUpdateEnvironment;
   readonly onFailure?: (message: string) => void;
@@ -113,6 +115,18 @@ export function registerHiddenUpdateTap(count: number): {
 }
 
 export async function runAppUpdateCheck(options: AppUpdateCheckOptions = {}): Promise<void> {
+  if (options.storeClient) {
+    options.onStateChange?.("checking");
+    try {
+      const prompted = await options.storeClient.checkForUpdate();
+      options.onStateChange?.(prompted ? "idle" : "current");
+    } catch {
+      options.onStateChange?.("idle");
+      options.onFailure?.(m(msg("Could not check for updates.")));
+    }
+    return;
+  }
+
   const client = options.client ?? Updates;
   if (!isAppUpdateCheckAvailable(client)) return;
 
