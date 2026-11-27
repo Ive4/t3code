@@ -223,8 +223,8 @@ export const comparisonBase = Effect.fn("checkChanged.comparisonBase")(function*
 // CI's lint and knip also read Astro components' frontmatter.
 const CODE = /\.(?:[cm]?[jt]sx?|astro)$/;
 const TEST = /\.test\.[cm]?[jt]sx?$/;
-// CI runs the .github/scripts tests with `node --test`; vitest passes a failing node:test file.
-const NODE_TEST = /^\.github[/\\]scripts[/\\]/;
+// These suites use the Node test runner, including ArkTS's native module loader hooks.
+const NODE_TEST = /^(?:\.github[/\\]scripts|apps[/\\]harmonyos[/\\]arkts[/\\]test)[/\\]/;
 export const splitTests = (tests: Iterable<string>) => {
   const all = [...tests];
   return {

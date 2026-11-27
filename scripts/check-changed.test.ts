@@ -144,12 +144,14 @@ describe("check:changed", () => {
     }),
   );
 
-  it("runs the .github/scripts node:test files with node --test, not vitest", () => {
+  it("routes standalone Node tests to node --test", () => {
     assert.deepStrictEqual(
       splitTests([
         "apps/server/src/ws.test.ts",
         ".github/scripts/ci-changes.test.cjs",
         ".github\\scripts\\thread-transfer-report.test.cjs",
+        "apps/harmonyos/arkts/test/thread-reconnect.test.mjs",
+        "apps\\harmonyos\\arkts\\test\\native-relay.test.mjs",
         "scripts/check-changed.test.ts",
       ]),
       {
@@ -157,6 +159,8 @@ describe("check:changed", () => {
         nodeTests: [
           ".github/scripts/ci-changes.test.cjs",
           ".github\\scripts\\thread-transfer-report.test.cjs",
+          "apps/harmonyos/arkts/test/thread-reconnect.test.mjs",
+          "apps\\harmonyos\\arkts\\test\\native-relay.test.mjs",
         ],
       },
     );
