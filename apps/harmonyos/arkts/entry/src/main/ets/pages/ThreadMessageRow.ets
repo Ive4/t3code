@@ -11,6 +11,7 @@ import type { ThreadMarkdownSection, ThreadMarkdownSpan, ThreadMarkdownTableAlig
 import { isMarkdownWebLink, threadMessageBlocks } from './ThreadMessageFormat';
 import { ThreadHistoricalReviewCommentCard } from './ThreadHistoricalReviewCommentCard';
 import { UiLanguage, uiText } from './UiLanguage';
+import { workspaceForegroundColor, workspaceGroupedCardColor, workspaceMutedColor } from './UiTheme';
 
 const MESSAGE_FONT_SIZE = 16;
 const MESSAGE_LINE_HEIGHT = 24;
@@ -39,7 +40,7 @@ struct ThreadCodeBlock {
       if (this.language) {
         Text(this.language)
           .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
+          .fontColor(workspaceMutedColor(this.dark))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
@@ -49,7 +50,7 @@ struct ThreadCodeBlock {
           .fontFamily('monospace')
           .fontSize(13)
           .lineHeight(CODE_LINE_HEIGHT)
-          .fontColor($r('sys.color.font_primary'))
+          .fontColor(workspaceForegroundColor(this.dark))
           .wordBreak(WordBreak.BREAK_ALL)
           .copyOption(CopyOptions.LocalDevice)
           .onSizeChange((_previous: SizeOptions, current: SizeOptions) => {
@@ -74,7 +75,7 @@ struct ThreadCodeBlock {
           .padding({ left: 8, right: 8 })
           .alignSelf(ItemAlign.End)
           .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
+          .fontColor(workspaceMutedColor(this.dark))
           .backgroundColor(Color.Transparent)
           .accessibilityStateDescription(this.expanded ? uiText(this.languageMode, '已展开', 'Expanded') :
             uiText(this.languageMode, '已收起', 'Collapsed'))
@@ -293,7 +294,7 @@ export struct ThreadMessageRow {
       Span(this.spanAt(block, section, span, column)?.text ?? '')
         .fontFamily('monospace')
         .fontSize(14)
-        .textBackgroundStyle({ color: $r('sys.color.comp_background_tertiary'), radius: 3 })
+        .textBackgroundStyle({ color: workspaceGroupedCardColor(this.dark), radius: 3 })
     } else if (this.citationEnabled && this.message.streaming !== true &&
       this.spanAt(block, section, span, column)?.citation !== undefined) {
       Span(this.citationLabel(block, section, span, column))
@@ -302,7 +303,7 @@ export struct ThreadMessageRow {
         .onClick(() => this.openCitation(block, section, span, column))
     } else if (this.spanAt(block, section, span, column)?.kind === 'citation') {
       Span(this.spanAt(block, section, span, column)?.text ?? '')
-        .fontColor($r('sys.color.font_secondary'))
+        .fontColor(workspaceMutedColor(this.dark))
         .fontStyle(FontStyle.Italic)
     } else {
       Span(this.spanAt(block, section, span, column)?.text ?? '')
@@ -380,7 +381,7 @@ export struct ThreadMessageRow {
         Text(this.sectionAt(block, section)?.marker ?? '')
           .fontSize(MESSAGE_FONT_SIZE)
           .lineHeight(MESSAGE_LINE_HEIGHT)
-          .fontColor($r('sys.color.font_secondary'))
+          .fontColor(workspaceMutedColor(this.dark))
       }
       Text() {
         ForEach(this.sectionAt(block, section)?.spans ?? [], (_span: ThreadMarkdownSpan, index: number) => {
@@ -391,7 +392,7 @@ export struct ThreadMessageRow {
       .fontSize(this.headingSize(this.sectionAt(block, section)))
       .lineHeight(this.headingSize(this.sectionAt(block, section)) + 8)
       .fontColor(this.sectionAt(block, section)?.kind === 'quote'
-        ? $r('sys.color.font_secondary') : $r('sys.color.font_primary'))
+        ? workspaceMutedColor(this.dark) : workspaceForegroundColor(this.dark))
       .wordBreak(WordBreak.BREAK_WORD)
       .copyOption(CopyOptions.LocalDevice)
       .editMenuOptions(this.sourceMenu)
@@ -409,7 +410,7 @@ export struct ThreadMessageRow {
     Text(index === undefined ? this.message.text : this.blocks[index]?.text ?? '')
       .fontSize(MESSAGE_FONT_SIZE)
       .lineHeight(MESSAGE_LINE_HEIGHT)
-      .fontColor($r('sys.color.font_primary'))
+      .fontColor(workspaceForegroundColor(this.dark))
       .wordBreak(WordBreak.BREAK_WORD)
       .copyOption(CopyOptions.LocalDevice)
       .editMenuOptions(this.sourceMenu)
@@ -431,12 +432,12 @@ export struct ThreadMessageRow {
             uiText(this.language,
               `${checkpoint.repositories.length + (checkpoint.files.length > 0 ? 1 : 0)} 个仓库`,
               `${checkpoint.repositories.length + (checkpoint.files.length > 0 ? 1 : 0)} repositories`))
-            .fontSize(12).fontColor($r('sys.color.font_secondary')).constraintSize({ maxWidth: 112 })
+            .fontSize(12).fontColor(workspaceMutedColor(this.dark)).constraintSize({ maxWidth: 112 })
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         Text(`+${checkpoint.totals.additions}`).fontSize(12).fontWeight(FontWeight.Medium).fontColor('#249E64')
         Text(`−${checkpoint.totals.deletions}`).fontSize(12).fontWeight(FontWeight.Medium).fontColor('#DB575D')
-        SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(12).fontColor([$r('sys.color.icon_secondary')])
+        SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(12).fontColor([workspaceMutedColor(this.dark)])
       }
     }
     .id(`thread-checkpoint-${checkpoint.ordinal}`).height(44).padding({ left: 8, right: 8 })
@@ -451,7 +452,7 @@ export struct ThreadMessageRow {
   private ReplyFork(source: NativeThreadForkSource) {
     Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
       if (this.forkBusy) LoadingProgress().height(18).width(18)
-      else SymbolGlyph($r('sys.symbol.arrow_triangle_merge')).fontSize(17).fontColor([$r('sys.color.icon_secondary')])
+      else SymbolGlyph($r('sys.symbol.arrow_triangle_merge')).fontSize(17).fontColor([workspaceMutedColor(this.dark)])
     }
     .id(`thread-reply-fork-${this.message.id}`).width(44).height(44)
     .enabled(this.forkEnabled && !this.forkBusy)
@@ -502,8 +503,8 @@ export struct ThreadMessageRow {
     Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
       Row({ space: 8 }) {
         SymbolGlyph(isVideoThreadAttachment(attachment) ? $r('sys.symbol.play_fill') : $r('sys.symbol.doc_plaintext'))
-          .fontSize(media ? 20 : 16).fontColor([$r('sys.color.icon_secondary')])
-        Text(attachment.name).fontSize(14).fontColor($r('sys.color.font_primary')).wordBreak(WordBreak.BREAK_WORD)
+          .fontSize(media ? 20 : 16).fontColor([workspaceMutedColor(this.dark)])
+        Text(attachment.name).fontSize(14).fontColor(workspaceForegroundColor(this.dark)).wordBreak(WordBreak.BREAK_WORD)
           .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
       }
     }
@@ -511,7 +512,7 @@ export struct ThreadMessageRow {
     .constraintSize({ minHeight: media ? 52 : 44, maxWidth: media ? '85%' : '100%' })
     .borderRadius(media ? 12 : 8)
     .padding({ left: 10, right: 10 })
-    .backgroundColor(media ? (this.dark ? '#1A1B1B' : '#F4F4F5') : $r('sys.color.comp_background_tertiary'))
+    .backgroundColor(media ? (this.dark ? '#1A1B1B' : '#F4F4F5') : workspaceGroupedCardColor(this.dark))
     .enabled(this.attachmentEnabled)
     .accessibilityText(uiText(this.language, `打开附件 ${attachment.name}`, `Open attachment ${attachment.name}`))
     .onClick(() => this.onOpenAttachment(attachment))
@@ -541,17 +542,17 @@ export struct ThreadMessageRow {
             Row({ space: 8 }) {
               SymbolGlyph($r('sys.symbol.doc_plaintext'))
                 .fontSize(16)
-                .fontColor([$r('sys.color.icon_secondary')])
+                .fontColor([workspaceMutedColor(this.dark)])
               Text(name)
                 .fontSize(14)
-                .fontColor($r('sys.color.font_primary'))
+                .fontColor(workspaceForegroundColor(this.dark))
                 .wordBreak(WordBreak.BREAK_WORD)
                 .maxLines(2)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
             .padding({ left: 8, right: 8, top: 6, bottom: 6 })
             .borderRadius(8)
-            .backgroundColor($r('sys.color.comp_background_tertiary'))
+            .backgroundColor(workspaceGroupedCardColor(this.dark))
           }, (name: string, index: number) => index.toString() + name)
           if (this.canCollapseMessage()) {
             Button(this.expanded ? uiText(this.language, '收起消息', 'Show less') :
@@ -561,7 +562,7 @@ export struct ThreadMessageRow {
               .height(44)
               .padding({ left: 8, right: 8 })
               .fontSize(12)
-              .fontColor($r('sys.color.font_secondary'))
+              .fontColor(workspaceMutedColor(this.dark))
               .backgroundColor(Color.Transparent)
               .accessibilityStateDescription(this.expanded ? uiText(this.language, '已展开', 'Expanded') :
                 uiText(this.language, '已收起', 'Collapsed'))
@@ -586,7 +587,7 @@ export struct ThreadMessageRow {
             }
           }
           if (this.blocks.length === 0 && this.message.streaming) {
-            Text(uiText(this.language, '正在回复…', 'Replying…')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+            Text(uiText(this.language, '正在回复…', 'Replying…')).fontSize(13).fontColor(workspaceMutedColor(this.dark))
           }
         }
         .constraintSize({ maxWidth: this.message.role === 'user' ? '85%' : '100%' })

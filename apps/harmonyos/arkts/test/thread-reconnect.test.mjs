@@ -1228,6 +1228,12 @@ function makeFixture(saved) {
             }),
           );
         },
+        streamItem(item) {
+          handlers.get("message")?.(
+            null,
+            JSON.stringify({ _tag: "Chunk", requestId: "1", values: [item] }),
+          );
+        },
         disconnect() {
           handlers.get("close")?.();
         },
@@ -1366,10 +1372,14 @@ NodeTest.test(
 );
 
 NodeTest.test(
-  "a dropped managed stream renews the ticket and replaces its stale snapshot",
+  "a dropped managed stream renews the ticket and catches up before publishing",
   async (test) => {
     test.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
     const fixture = makeFixture();
+    const cursors = [];
+    fixture.onFrame = (frame) => {
+      if (frame.tag === "orchestration.subscribeThread") cursors.push(frame.payload.afterSequence);
+    };
     await fixtureContext.run(fixture, async () => {
       const client = new T3Client({});
       const connection = fixture.makeConnection();
@@ -1379,7 +1389,7 @@ NodeTest.test(
       const firstSubscription = fixture.nextSubscription();
       const stop = client.watchThread(
         threadId,
-        (messages) => updates.push(messages[0].text),
+        (messages) => updates.push(messages.map((message) => message.text)),
         (_error, reconnecting) => failures.push(reconnecting),
       );
       try {
@@ -1390,13 +1400,104 @@ NodeTest.test(
         const secondSubscription = fixture.nextSubscription();
         test.mock.timers.tick(1000);
         const second = await secondSubscription;
-        second.message("Caught up", 8);
+        second.streamItem({
+          kind: "event",
+          sequence: 8,
+          event: {
+            threadId,
+            type: "message.updated",
+            payload: { id: "message-2", threadId, role: "assistant", text: "Caught up" },
+          },
+        });
+        NodeAssert.deepEqual(updates, [["Before drop"]]);
+        second.streamItem({ kind: "synchronized" });
         first.message("Retired socket", 9);
-        NodeAssert.deepEqual(updates, ["Before drop", "Caught up"]);
+        NodeAssert.deepEqual(updates, [["Before drop"], ["Before drop", "Caught up"]]);
+        second.disconnect();
+        const thirdSubscription = fixture.nextSubscription();
+        test.mock.timers.tick(1000);
+        (await thirdSubscription).message("Replacement snapshot", 10);
+        NodeAssert.deepEqual(updates.at(-1), ["Replacement snapshot"]);
+        NodeAssert.deepEqual(cursors, [undefined, 5, 8]);
         NodeAssert.deepEqual(fixture.addresses, [
           "wss://fixture.example.test/ws?wsTicket=single-use-1",
           "wss://fixture.example.test/ws?wsTicket=single-use-2",
+          "wss://fixture.example.test/ws?wsTicket=single-use-3",
         ]);
+      } finally {
+        stop();
+      }
+    });
+  },
+);
+
+NodeTest.test("a reconnect publishes even when no events were missed", async (test) => {
+  test.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+  const fixture = makeFixture();
+  await fixtureContext.run(fixture, async () => {
+    const client = new T3Client({});
+    await client.connectManaged(environmentId, accountId, async () => fixture.makeConnection());
+    const updates = [];
+    const opened = fixture.nextSubscription();
+    const stop = client.watchThread(
+      threadId,
+      (messages) => updates.push(messages[0].text),
+      () => {},
+    );
+    try {
+      const first = await opened;
+      first.message("Already visible", 5);
+      first.disconnect();
+      const reopened = fixture.nextSubscription();
+      test.mock.timers.tick(1000);
+      (await reopened).streamItem({ kind: "synchronized" });
+      NodeAssert.deepEqual(updates, ["Already visible", "Already visible"]);
+    } finally {
+      stop();
+    }
+  });
+});
+
+NodeTest.test(
+  "keeps retrying a temporarily unavailable route after the initial backoff",
+  async (test) => {
+    test.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+    const fixture = makeFixture();
+    await fixtureContext.run(fixture, async () => {
+      const client = new T3Client({});
+      const connection = fixture.makeConnection();
+      let online = true;
+      await client.connectManaged(environmentId, accountId, async () => ({
+        ...connection,
+        socketAddress: async () => {
+          if (!online) throw new AccountNetworkError();
+          return connection.socketAddress();
+        },
+      }));
+      let failure = Promise.withResolvers();
+      const updates = [];
+      const opened = fixture.nextSubscription();
+      const stop = client.watchThread(
+        threadId,
+        (messages) => updates.push(messages[0].text),
+        (_error, reconnecting) => failure.resolve(reconnecting),
+      );
+      try {
+        const first = await opened;
+        first.message("Before the outage", 5);
+        online = false;
+        first.disconnect();
+        NodeAssert.equal(await failure.promise, true);
+        for (const delay of [1000, 2000, 4000]) {
+          failure = Promise.withResolvers();
+          test.mock.timers.tick(delay);
+          NodeAssert.equal(await failure.promise, true);
+        }
+        online = true;
+        const reopened = fixture.nextSubscription();
+        test.mock.timers.tick(8000);
+        (await reopened).streamItem({ kind: "synchronized" });
+        NodeAssert.deepEqual(updates, ["Before the outage", "Before the outage"]);
       } finally {
         stop();
       }

@@ -729,6 +729,8 @@ struct Index {
   @State private threadActionBusy: boolean = false;
   @State private watchError: string = '';
   @State private threadReconnecting: boolean = false;
+  @State private threadHasNewMessages: boolean = false;
+  @State private threadDraftWritable: boolean = false;
   @State private historyCursor: string | undefined = undefined;
   @State private historyBusy: boolean = false;
   @State private historyError: string = '';
@@ -1017,7 +1019,16 @@ struct Index {
         this.pendingMessageJump = parent.messageId ?? '';
         return true;
       }
+      const threadId = this.selected.id;
+      const title = this.threadDetail?.title;
+      const row = this.allThreads.find((thread: NativeThread) =>
+        thread.id === threadId && thread.environmentKey === this.environmentKey);
       this.closeThread();
+      if (row && title && row.title !== title) {
+        row.title = title;
+        this.updateThreadResults();
+        void this.refreshThreads();
+      }
       return true;
     }
     if (this.showPairing && !this.pairing) {
@@ -3095,9 +3106,13 @@ struct Index {
       if (client.currentEnvironment()?.key !== environmentKey) throw new Error('环境连接已更换，请核对附件后重试。');
       const thread = await client.launchThread(this.threadLaunchAttempt, project, model, text, mode, this.threadLaunchUploaded,
         workspace, records.length > 0 ? { version: 1, records } : undefined);
+      if (client.currentEnvironment()?.key !== environmentKey) return;
+      thread.environmentKey = environmentKey;
+      thread.environmentLabel = client.currentEnvironment()?.label;
+      this.setWorkspaceThreads([thread].concat(this.allThreads.filter((row: NativeThread) =>
+        row.id !== thread.id || row.environmentKey !== environmentKey)));
       this.closeThreadLaunch();
       this.openThread(thread);
-      void this.refreshThreads();
     } catch (error) {
       this.threadLaunchError = errorMessage(error as Error, '新建会话失败');
     } finally {
@@ -3192,6 +3207,9 @@ struct Index {
     this.firstVisibleThreadIndex = -1;
     this.resumeThreadIndex = -1;
     this.selected = thread;
+    this.watchError = '';
+    this.threadDraftWritable = false;
+    this.threadHasNewMessages = false;
     this.backgroundTasks = thread.pendingBackgroundTasks ?? [];
     this.backgroundLatestRunId = thread.latestRunId ?? '';
     this.backgroundStopping = this.backgroundStopRequests.has(this.backgroundWorkKey(thread.id));
@@ -3251,16 +3269,16 @@ struct Index {
     if (!client || !thread) return;
     this.stopWatching();
     const generation = this.watchGeneration;
-    this.watchError = '';
-    this.threadReconnecting = false;
+    this.threadReconnecting = !!this.watchError;
     this.loadingMessages = this.messageCount === 0;
-    void this.refreshThreadPermissions(client, generation);
+    if (!this.threadReconnecting) void this.refreshThreadPermissions(client, generation);
     this.unsubscribe = client.watchThread(thread.id,
       (messages: NativeMessage[], detail: NativeThreadDetail, historyCursor?: string) => {
       if (this.watchGeneration !== generation) return;
       const followLatest = !this.showThreadFiles && !this.showThreadGit && !this.showThreadReview &&
         !this.showThreadTerminal && !this.previewAttachment &&
         (this.messageCount === 0 ? this.resumeThreadIndex < 0 : this.messageScroller.isAtEnd());
+      const receivedMessages = this.messageCount > 0 && messages !== this.recentMessages;
       if (historyCursor !== this.historySnapshotCursor) {
         if (this.historyMessages.length > 0 || this.historyWork.size > 0) {
           this.historyMessages = mergeMessages(this.historyMessages, this.recentMessages);
@@ -3319,9 +3337,11 @@ struct Index {
         this.getUIContext().postFrameCallback(new AfterLayout(() => {
           if (this.watchGeneration === generation && !this.showThreadFiles && !this.showThreadGit && !this.showThreadReview &&
             !this.showThreadTerminal && this.messageCount > 0) {
-            this.messageScroller.scrollToIndex(this.lastThreadFeedIndex(), false, ScrollAlign.END);
+            this.scrollToLatestThreadMessage();
           }
         }));
+      } else if (receivedMessages && changed) {
+        this.threadHasNewMessages = true;
       }
     }, (error: Error, reconnecting: boolean) => {
       if (this.watchGeneration !== generation) return;
@@ -3578,6 +3598,7 @@ struct Index {
       if (this.watchGeneration !== generation || request !== this.threadPermissionsRequest) return;
       const terminalPermissionChanged = this.threadCanOperateTerminal !== permissions.terminalOperate;
       this.threadAccess = permissions.operate ? 'allowed' : 'read-only';
+      this.threadDraftWritable = permissions.operate;
       this.threadCanReadFiles = permissions.readFiles;
       this.threadCanWriteGit = permissions.gitWrite;
       this.threadCanReadTerminal = permissions.terminalRead;
@@ -5118,6 +5139,11 @@ struct Index {
     return Math.max(0, this.messageCount - 1 + this.threadHistoryHeaderSize() + (this.showBackgroundWorkStatus() ? 1 : 0));
   }
 
+  private scrollToLatestThreadMessage(): void {
+    this.threadHasNewMessages = false;
+    this.messageScroller.scrollToIndex(this.lastThreadFeedIndex(), false, ScrollAlign.END);
+  }
+
   private openBackgroundWork(): void {
     this.getUIContext().getFocusController().clearFocus();
     this.showBackgroundWork = true;
@@ -6049,6 +6075,85 @@ struct Index {
   }
 
   @Builder
+  private ConversationFeed() {
+    List({
+      space: 8,
+      scroller: this.messageScroller,
+      initialIndex: this.resumeThreadIndex < 0 ? this.lastThreadFeedIndex() :
+        Math.min(this.resumeThreadIndex, this.lastThreadFeedIndex()),
+    }) {
+      if (this.historyCursor !== undefined) {
+        ListItem() {
+          Column({ space: 6 }) {
+            if (this.historyError) {
+              Text(this.historyError).fontSize(14).textAlign(TextAlign.Center)
+            }
+            if (this.historyBusy) {
+              LoadingProgress().width(20).height(20)
+            }
+            Button(this.historyBusy ? this.copy('正在加载…', 'Loading…') : this.historyError ?
+              this.copy('重试', 'Retry') : this.copy('加载更早的活动', 'Load earlier activity'))
+              .id('thread-load-history')
+              .height(44)
+              .enabled(!this.historyBusy)
+              .onClick(() => { void this.loadOlderThreadHistory(); })
+          }.width('100%').padding(8)
+        }
+      }
+      LazyForEach(this.messages, (entry: FeedEntry) => {
+        ListItem() {
+          if (entry.workGroup) {
+            this.GroupedThreadWork(entry)
+          } else {
+            CurrentFeedRow({
+              entry,
+              language: this.uiLanguage(),
+              dark: this.darkAppearance,
+              isLastAssistant: entry.id === this.lastAssistantFeedId,
+              expanded: this.expandedMessages.includes(entry.id),
+              expandedCodes: this.expandedCodeBlocks.get(entry.id) ?? [],
+              workOutput: this.workOutput.get(entry.id),
+              loadingWork: this.loadingWork.includes(entry.id),
+              quoteEnabled: this.threadAccess === 'allowed' && !this.watchError && !this.sending &&
+                entry.message?.threadId === this.selected?.id,
+              citationEnabled: entry.message?.threadId === this.selected?.id,
+              checkpointEnabled: !this.watchError && !this.loadingMessages,
+              forkEnabled: this.canForkReply() && !this.replyForkBusyMessage,
+              forkBusy: this.replyForkBusyMessage !== '' && this.replyForkBusyMessage === entry.message?.id,
+              onQuote: (messageId: string, selector: ThreadCitationSelector) => this.addThreadQuote(messageId, selector),
+              onOpenCitation: (citation: NativeThreadCitation) => this.openCitation(citation),
+              onOpenAttachment: (message: NativeMessage, attachment: NativeThreadAttachment) =>
+                this.openThreadAttachment(message, attachment),
+              onOpenCheckpoint: (checkpoint: NativeThreadCheckpointSummary) => this.openThreadCheckpoint(checkpoint),
+              onFork: (source: NativeThreadForkSource, messageId: string) => { void this.forkReply(source, messageId); },
+              onToggle: () => { void this.toggleFeedEntry(entry); },
+              onToggleCode: (blockIndex: number) => this.toggleCodeBlock(entry.id, blockIndex),
+            })
+          }
+        }
+      }, (entry: FeedEntry) => entry.id)
+      if (this.showBackgroundWorkStatus()) {
+        ListItem() {
+          ThreadBackgroundWorkStatus({
+            tasks: this.backgroundTasks,
+            canStop: this.canStopBackgroundWork(),
+            stopping: this.backgroundStopping,
+            onOpen: () => this.openBackgroundWork(),
+            onStop: () => { void this.stopBackgroundWork(); },
+          })
+        }
+      }
+    }
+    .stackFromEnd(true)
+    .maintainVisibleContentPosition(true)
+    .onScrollIndex((first: number) => { this.firstVisibleThreadIndex = first; })
+    .onReachEnd(() => { this.threadHasNewMessages = false; })
+    .height('100%')
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+  }
+
+  @Builder
   private ConversationBody() {
     if (this.watchError) {
       Row({ space: 8 }) {
@@ -6057,90 +6162,30 @@ struct Index {
         }
         Text(this.threadReconnecting ? this.copy('正在重新连接会话…', 'Reconnecting to chat…') : this.watchError)
           .fontSize(14)
-          .fontColor($r('sys.color.font_secondary'))
+          .fontColor(workspaceMutedColor(this.darkAppearance))
           .layoutWeight(1)
         Button(this.copy('重试', 'Retry'))
+          .id('thread-reconnect-retry')
           .controlSize(ControlSize.SMALL)
           .onClick(() => this.watchThread())
       }
       .width('100%')
       .padding(14)
+      .id('thread-connection-status')
     }
     if (this.messageCount > 0 || this.historyCursor !== undefined || this.showBackgroundWorkStatus()) {
-      List({
-        space: 8,
-        scroller: this.messageScroller,
-        initialIndex: this.resumeThreadIndex < 0 ? this.lastThreadFeedIndex() :
-          Math.min(this.resumeThreadIndex, this.lastThreadFeedIndex()),
-      }) {
-        if (this.historyCursor !== undefined) {
-          ListItem() {
-            Column({ space: 6 }) {
-              if (this.historyError) {
-                Text(this.historyError).fontSize(14).textAlign(TextAlign.Center)
-              }
-              if (this.historyBusy) {
-                LoadingProgress().width(20).height(20)
-              }
-              Button(this.historyBusy ? this.copy('正在加载…', 'Loading…') : this.historyError ?
-                this.copy('重试', 'Retry') : this.copy('加载更早的活动', 'Load earlier activity'))
-                .id('thread-load-history')
-                .height(44)
-                .enabled(!this.historyBusy)
-                .onClick(() => { void this.loadOlderThreadHistory(); })
-            }.width('100%').padding(8)
-          }
-        }
-        LazyForEach(this.messages, (entry: FeedEntry) => {
-          ListItem() {
-            if (entry.workGroup) {
-              this.GroupedThreadWork(entry)
-            } else {
-              CurrentFeedRow({
-                entry,
-                language: this.uiLanguage(),
-                dark: this.darkAppearance,
-                isLastAssistant: entry.id === this.lastAssistantFeedId,
-                expanded: this.expandedMessages.includes(entry.id),
-                expandedCodes: this.expandedCodeBlocks.get(entry.id) ?? [],
-                workOutput: this.workOutput.get(entry.id),
-                loadingWork: this.loadingWork.includes(entry.id),
-                quoteEnabled: this.threadAccess === 'allowed' && !this.watchError && !this.sending &&
-                  entry.message?.threadId === this.selected?.id,
-                citationEnabled: entry.message?.threadId === this.selected?.id,
-                checkpointEnabled: !this.watchError && !this.loadingMessages,
-                forkEnabled: this.canForkReply() && !this.replyForkBusyMessage,
-                forkBusy: this.replyForkBusyMessage !== '' && this.replyForkBusyMessage === entry.message?.id,
-                onQuote: (messageId: string, selector: ThreadCitationSelector) => this.addThreadQuote(messageId, selector),
-                onOpenCitation: (citation: NativeThreadCitation) => this.openCitation(citation),
-                onOpenAttachment: (message: NativeMessage, attachment: NativeThreadAttachment) =>
-                  this.openThreadAttachment(message, attachment),
-                onOpenCheckpoint: (checkpoint: NativeThreadCheckpointSummary) => this.openThreadCheckpoint(checkpoint),
-                onFork: (source: NativeThreadForkSource, messageId: string) => { void this.forkReply(source, messageId); },
-                onToggle: () => { void this.toggleFeedEntry(entry); },
-                onToggleCode: (blockIndex: number) => this.toggleCodeBlock(entry.id, blockIndex),
-              })
-            }
-          }
-        }, (entry: FeedEntry) => entry.id)
-        if (this.showBackgroundWorkStatus()) {
-          ListItem() {
-            ThreadBackgroundWorkStatus({
-              tasks: this.backgroundTasks,
-              canStop: this.canStopBackgroundWork(),
-              stopping: this.backgroundStopping,
-              onOpen: () => this.openBackgroundWork(),
-              onStop: () => { void this.stopBackgroundWork(); },
-            })
-          }
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        this.ConversationFeed()
+        if (this.threadHasNewMessages) {
+          Button(this.copy('跳到最新', 'Jump to latest'), { type: ButtonType.Capsule })
+            .id('thread-jump-latest')
+            .height(44)
+            .margin({ right: 16, bottom: 10 })
+            .onClick(() => this.scrollToLatestThreadMessage())
         }
       }
-      .stackFromEnd(true)
-      .maintainVisibleContentPosition(true)
-      .onScrollIndex((first: number) => { this.firstVisibleThreadIndex = first; })
-      .layoutWeight(1)
       .width('100%')
-      .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+      .layoutWeight(1)
     } else {
       this.Status(this.loadingMessages ? this.copy('正在加载消息…', 'Loading messages…') : this.watchError ?
         this.copy('消息暂时不可用', 'Messages are unavailable') : this.copy('尚无对话', 'No messages yet'),
@@ -6199,6 +6244,7 @@ struct Index {
       language: this.uiLanguage(),
       dark: this.darkAppearance,
       readOnly: this.threadAccess !== 'allowed' || !!this.watchError,
+      canEditLocalDraft: this.threadDraftWritable,
       placeholder: this.threadDetail?.approval?.supportsFeedback && this.threadAccess === 'allowed' ?
         this.copy('输入审批反馈', 'Enter approval feedback') : this.copy('问点什么', 'Ask anything'),
       error: this.sendError,

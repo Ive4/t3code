@@ -301,7 +301,19 @@ const PULL_REQUEST_FILE_DIFF_LIMITS: EnvironmentResponseLimits = { readTimeout: 
   maxLimit: 64 * 1024 * 1024 };
 const LONG_RPC_TIMEOUT_MS = 10 * 60 * 1000 + NETWORK_TIMEOUT_MS;
 const THREAD_RECONNECT_DELAYS_MS = [1000, 2000, 4000];
+const THREAD_OFFLINE_RETRY_MS = 8000;
 type ThreadUpdate = (messages: NativeMessage[], detail: NativeThreadDetail, historyCursor?: string) => void;
+
+class ThreadWatchState {
+  messages: NativeMessage[] = [];
+  sequence: number = -1;
+  historyCursor?: string;
+  readonly projection: ThreadDetailProjection;
+
+  constructor(threadId: string) {
+    this.projection = new ThreadDetailProjection(threadId);
+  }
+}
 
 interface BackgroundShellRows {
   threads: NativeThread[];
@@ -1957,6 +1969,7 @@ export class T3Client {
   watchThread(threadId: string, onUpdate: ThreadUpdate,
     onError: (error: Error, reconnecting: boolean) => void): () => void {
     const session = this.requireSession();
+    const state = new ThreadWatchState(threadId);
     let cancelAttempt: () => void = () => {};
     let retryTimer = -1;
     let retries = 0;
@@ -1970,12 +1983,14 @@ export class T3Client {
     };
     const start = (): void => {
       if (stopped || this.session !== session) return;
-      cancelAttempt = this.watchThreadOnce(session, threadId, (messages, detail, historyCursor?: string) => {
+      cancelAttempt = this.watchThreadOnce(session, threadId, state, (messages, detail, historyCursor?: string) => {
         retries = 0;
         onUpdate(messages, detail, historyCursor);
       }, (error: Error) => {
         if (stopped) return;
-        const delay = THREAD_RECONNECT_DELAYS_MS[retries++];
+        const delay = THREAD_RECONNECT_DELAYS_MS[retries] ??
+          (canTryAnotherEnvironmentRoute(error) ? THREAD_OFFLINE_RETRY_MS : undefined);
+        retries = Math.min(retries + 1, THREAD_RECONNECT_DELAYS_MS.length);
         if (delay === undefined) {
           stop();
           onError(error, false);
@@ -2071,7 +2086,7 @@ export class T3Client {
       cancel();
       this.watchers.delete(stop);
     };
-    const cancel = this.watchThreadOnce(session, threadId, onUpdate, (error) => {
+    const cancel = this.watchThreadOnce(session, threadId, new ThreadWatchState(threadId), onUpdate, (error) => {
       this.watchers.delete(stop);
       onError(error);
     }, environmentId);
@@ -2079,23 +2094,21 @@ export class T3Client {
     return stop;
   }
 
-  private watchThreadOnce(session: SavedEnvironment, threadId: string,
+  private watchThreadOnce(session: SavedEnvironment, threadId: string, state: ThreadWatchState,
     onUpdate: ThreadUpdate,
     onError: (error: Error) => void, linkedEnvironmentId?: string): () => void {
     const socket = new T3Socket();
-    let messages: NativeMessage[] = [];
-    const projection = new ThreadDetailProjection(threadId);
+    const projection = state.projection;
     let forkSources = projection.replyForkSources();
     let detail = projection.view();
-    let lastSequence = -1;
-    let historyCursor: string | undefined = undefined;
-    let snapshotTimer: number = -1;
-    let snapshotLoaded = false;
+    const resumeSequence = state.sequence >= 0 ? state.sequence : undefined;
+    let startupTimer: number = -1;
+    let synchronized = false;
     let stopped = false;
     const stop = (): void => {
       if (stopped) return;
       stopped = true;
-      clearTimeout(snapshotTimer);
+      clearTimeout(startupTimer);
       socket.close();
     };
     const fail = (error: Error): void => {
@@ -2107,29 +2120,33 @@ export class T3Client {
       if (stopped) return;
       if (frame._tag === 'Defect' || frame._tag === 'ClientProtocolError' ||
         (frame._tag === 'Exit' && String(frame.requestId) === REQUEST_ID)) {
+        if (!synchronized) state.sequence = -1;
         fail(linkedEnvironmentId !== undefined ? linkedThreadReadError(frame.exit) : new Error('环境未能保持会话同步。'));
         return;
       }
       if (frame._tag !== 'Chunk' || String(frame.requestId) !== REQUEST_ID || !Array.isArray(frame.values)) return;
       let detailChanged = false;
       let messageChanged = false;
+      let becameSynchronized = false;
       let updates: NativeMessage[] = [];
       try {
         for (const item of frame.values) {
           if (item.kind === 'snapshot' && item.projection) {
             if (item.projection.thread?.id !== threadId) throw new Error('环境返回了不同会话的消息。');
-            messages = readMessages(item.projection);
+            state.messages = readMessages(item.projection);
             projection.reset(item.projection);
             updates = [];
-            lastSequence = item.snapshotSequence ?? -1;
-            historyCursor = item.hasMoreHistory && typeof item.historyCursor === 'string' ? item.historyCursor : undefined;
-            snapshotLoaded = true;
-            clearTimeout(snapshotTimer);
+            state.sequence = item.snapshotSequence ?? -1;
+            state.historyCursor = item.hasMoreHistory && typeof item.historyCursor === 'string' ? item.historyCursor : undefined;
+            synchronized = true;
+            becameSynchronized = true;
             detailChanged = true;
             messageChanged = true;
-          } else if (snapshotLoaded && item.kind === 'event' && item.event &&
-            item.event.threadId === threadId && item.sequence !== undefined && item.sequence > lastSequence) {
-            lastSequence = item.sequence;
+          } else if (!synchronized && resumeSequence !== undefined && item.kind === 'synchronized') {
+            synchronized = true;
+            becameSynchronized = true;
+          } else if ((synchronized || resumeSequence !== undefined) && item.kind === 'event' && item.event &&
+            item.event.threadId === threadId && item.sequence !== undefined && item.sequence > state.sequence) {
             if (item.event.type === 'message.updated') {
               const incoming = readMessage(item.event.payload);
               if (incoming && (linkedEnvironmentId === undefined || incoming.threadId === threadId)) updates.push(incoming);
@@ -2137,24 +2154,29 @@ export class T3Client {
             if (projection.apply(item.event.type, item.event.payload)) {
               detailChanged = true;
             }
+            state.sequence = item.sequence;
           }
         }
         const nextForkSources = projection.replyForkSources();
         if (updates.length > 0) {
-          messages = mergeMessages(messages, updates.map((message: NativeMessage): NativeMessage =>
+          state.messages = mergeMessages(state.messages, updates.map((message: NativeMessage): NativeMessage =>
             attachThreadReplyForkSource(message, nextForkSources.get(message.id))));
           messageChanged = true;
         }
         if (nextForkSources !== forkSources) {
-          messages = messages.map((message: NativeMessage): NativeMessage =>
+          state.messages = state.messages.map((message: NativeMessage): NativeMessage =>
             attachThreadReplyForkSource(message, nextForkSources.get(message.id)));
           forkSources = nextForkSources;
           messageChanged = true;
         }
         if (detailChanged) detail = projection.view();
         void socket.send('{"_tag":"Ack","requestId":"' + REQUEST_ID + '"}').catch(fail);
-        if (snapshotLoaded && (messageChanged || detailChanged)) onUpdate(messages, detail, historyCursor);
+        if (becameSynchronized) clearTimeout(startupTimer);
+        if (synchronized && (becameSynchronized || messageChanged || detailChanged)) {
+          onUpdate(state.messages, detail, state.historyCursor);
+        }
       } catch (error) {
+        state.sequence = -1;
         fail(error as Error);
       }
     };
@@ -2162,8 +2184,11 @@ export class T3Client {
       if (stopped) return;
       await socket.open(address, onFrame, fail);
       if (stopped) return;
-      snapshotTimer = setTimeout(() => fail(new Error('环境未及时返回会话消息。')), NETWORK_TIMEOUT_MS);
-      const request = linkedEnvironmentId === undefined ? subscribeRequest(threadId) :
+      startupTimer = setTimeout(() => {
+        state.sequence = -1;
+        fail(new Error('环境未及时返回会话消息。'));
+      }, NETWORK_TIMEOUT_MS);
+      const request = linkedEnvironmentId === undefined ? subscribeRequest(threadId, resumeSequence) :
         linkedThreadRequest(linkedEnvironmentId, threadId);
       await socket.send(JSON.stringify(request));
     }).catch((error: Error) => fail(error));

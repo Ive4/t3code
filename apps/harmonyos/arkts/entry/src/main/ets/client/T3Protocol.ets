@@ -145,6 +145,7 @@ export interface ThreadMessageContext {
 
 interface ThreadSubscription {
   threadId: string;
+  afterSequence?: number;
   acceptBoundedSnapshot: boolean;
   requestCompletionMarker: boolean;
 }
@@ -183,12 +184,13 @@ export function dispatchRequest(commandId: string, messageId: string, threadId: 
   return { _tag: 'Request', id: REQUEST_ID, tag: 'orchestration.dispatchCommand', payload, headers: [] };
 }
 
-export function subscribeRequest(threadId: string): RpcRequest {
+export function subscribeRequest(threadId: string, afterSequence?: number): RpcRequest {
   const payload: ThreadSubscription = {
     threadId,
     acceptBoundedSnapshot: true,
     requestCompletionMarker: true,
   };
+  if (afterSequence !== undefined) payload.afterSequence = afterSequence;
   return { _tag: 'Request', id: REQUEST_ID, tag: 'orchestration.subscribeThread', payload, headers: [] };
 }
 

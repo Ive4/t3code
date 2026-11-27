@@ -16,6 +16,7 @@ const EDITOR_LINE_HEIGHT = 23;
 const EDITOR_HORIZONTAL_PADDING = 8;
 const EDITOR_VERTICAL_PADDING = 9;
 const EDITOR_MAX_LINES = 4;
+const EXPANDED_EDITOR_HEIGHT = EDITOR_LINE_HEIGHT * EDITOR_MAX_LINES + EDITOR_VERTICAL_PADDING * 2;
 const CONTROL_SIZE = 42;
 
 class ThreadComposerCaret extends FrameCallback {
@@ -44,6 +45,7 @@ export struct ThreadDetailComposer {
   @Prop language: UiLanguage = 'zh';
   @Prop dark: boolean = false;
   @Prop readOnly: boolean = false;
+  @Prop canEditLocalDraft: boolean = false;
   @Prop error: string = '';
   @Prop sending: boolean = false;
   @Prop canSend: boolean = false;
@@ -405,8 +407,7 @@ export struct ThreadDetailComposer {
           .margin({ left: !this.editorExpanded && this.canAttach ? CONTROL_SIZE : 0 })
           .constraintSize({
             minHeight: CONTROL_SIZE,
-            maxHeight: this.editorExpanded ? EDITOR_LINE_HEIGHT * EDITOR_MAX_LINES + EDITOR_VERTICAL_PADDING * 2 :
-              CONTROL_SIZE,
+            maxHeight: this.editorExpanded ? EXPANDED_EDITOR_HEIGHT : CONTROL_SIZE,
           })
           .padding({
             left: EDITOR_HORIZONTAL_PADDING, right: EDITOR_HORIZONTAL_PADDING,
@@ -417,7 +418,7 @@ export struct ThreadDetailComposer {
           .fontColor(this.dark ? '#F5F5F5' : '#27272A')
           .placeholderColor(this.dark ? '#A3A3A3' : '#6F6F79')
           .backgroundColor(Color.Transparent)
-          .enabled(!this.readOnly)
+          .enabled(!this.readOnly || this.canEditLocalDraft)
           .enterKeyType(EnterKeyType.NEW_LINE)
           .accessibilityText(this.placeholder || uiText(this.language, '输入消息', 'Message'))
           .onFocus(() => {
@@ -434,6 +435,7 @@ export struct ThreadDetailComposer {
         this.MessageActions()
       }
       .width('100%')
+      .constraintSize({ maxHeight: this.editorExpanded ? EXPANDED_EDITOR_HEIGHT + CONTROL_SIZE : CONTROL_SIZE })
       .onSizeChange((_previous: SizeOptions, current: SizeOptions) => {
         if (typeof current.width !== 'number' || this.composerWidth === current.width) return;
         this.composerWidth = current.width;
